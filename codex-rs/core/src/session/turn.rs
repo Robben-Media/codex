@@ -1853,6 +1853,7 @@ async fn try_run_sampling_request(
             turn_context.reasoning_summary,
             turn_context.config.service_tier,
             turn_metadata_header,
+            turn_context.trace_context.as_ref(),
         )
         .instrument(trace_span!("stream_request"))
         .or_cancel(&cancellation_token)
