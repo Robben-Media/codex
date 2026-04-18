@@ -92,7 +92,6 @@ impl ToolCallRuntime {
         let turn = Arc::clone(&self.turn_context);
         let tracker = Arc::clone(&self.tracker);
         let lock = Arc::clone(&self.parallel_execution);
-        let invocation_cancellation_token = cancellation_token.clone();
         let started = Instant::now();
         let display_name = call.tool_name.display();
 
@@ -120,10 +119,9 @@ impl ToolCallRuntime {
                         };
 
                         router
-                            .dispatch_tool_call_with_code_mode_result_with_cancellation(
+                            .dispatch_tool_call_with_code_mode_result(
                                 session,
                                 turn,
-                                invocation_cancellation_token,
                                 tracker,
                                 call.clone(),
                                 source,

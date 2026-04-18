@@ -109,7 +109,6 @@ impl ToolHandler for JsReplHandler {
         let ToolInvocation {
             session,
             turn,
-            cancellation_token,
             tracker,
             payload,
             call_id,
@@ -135,13 +134,7 @@ impl ToolHandler for JsReplHandler {
         let started_at = Instant::now();
         emit_js_repl_exec_begin(session.as_ref(), turn.as_ref(), &call_id).await;
         let result = manager
-            .execute_with_cancellation(
-                Arc::clone(&session),
-                Arc::clone(&turn),
-                cancellation_token,
-                tracker,
-                args,
-            )
+            .execute(Arc::clone(&session), Arc::clone(&turn), tracker, args)
             .await;
         let result = match result {
             Ok(result) => result,

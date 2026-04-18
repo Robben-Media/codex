@@ -22,7 +22,6 @@ impl ToolHandler for RequestPermissionsHandler {
         let ToolInvocation {
             session,
             turn,
-            cancellation_token,
             call_id,
             payload,
             ..
@@ -49,7 +48,7 @@ impl ToolHandler for RequestPermissionsHandler {
         }
 
         let response = session
-            .request_permissions(&turn, call_id, args, cancellation_token)
+            .request_permissions(&turn, call_id, args)
             .await
             .ok_or_else(|| {
                 FunctionCallError::RespondToModel(

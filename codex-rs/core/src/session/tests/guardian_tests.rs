@@ -36,10 +36,8 @@ use core_test_support::codex_linux_sandbox_exe_or_skip;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
-use core_test_support::responses::mount_response_once;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
-use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
@@ -48,7 +46,6 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
-use tokio_util::sync::CancellationToken;
 
 fn expect_text_output(output: &FunctionToolOutput) -> String {
     function_call_output_content_items_to_text(&output.body).unwrap_or_default()
@@ -119,7 +116,6 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
                 reason: Some("need network".to_string()),
                 permissions: requested_permissions.clone(),
             },
-            CancellationToken::new(),
         ),
     )
     .await
@@ -141,103 +137,6 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     assert_eq!(guardian_request.path(), "/v1/responses");
     assert!(guardian_request.body_contains_text("request_permissions"));
     assert!(guardian_request.body_contains_text("need network"));
-}
-
-#[tokio::test]
-async fn request_permissions_guardian_review_stops_when_cancelled() {
-    let server = start_mock_server().await;
-    let _guardian_request_log = mount_response_once(
-        &server,
-        sse_response(sse(vec![ev_response_created("resp-guardian-delayed")]))
-            .set_delay(Duration::from_secs(60)),
-    )
-    .await;
-
-    let (mut session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    let turn_context_raw = Arc::get_mut(&mut turn_context).expect("single turn context ref");
-    turn_context_raw
-        .approval_policy
-        .set(AskForApproval::OnRequest)
-        .expect("test setup should allow updating approval policy");
-    turn_context_raw
-        .features
-        .enable(Feature::GuardianApproval)
-        .expect("test setup should allow enabling guardian approvals");
-    let mut config = (*turn_context_raw.config).clone();
-    config.approvals_reviewer = ApprovalsReviewer::GuardianSubagent;
-    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
-    let config = Arc::new(config);
-    let models_manager = Arc::new(crate::test_support::models_manager_with_provider(
-        config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
-        config.model_provider.clone(),
-    ));
-    Arc::get_mut(&mut session)
-        .expect("single session ref")
-        .services
-        .models_manager = models_manager;
-    turn_context_raw.config = Arc::clone(&config);
-    turn_context_raw.provider = create_model_provider(
-        config.model_provider.clone(),
-        turn_context_raw.auth_manager.clone(),
-    );
-
-    let requested_permissions = RequestPermissionProfile {
-        network: Some(NetworkPermissions {
-            enabled: Some(true),
-        }),
-        ..RequestPermissionProfile::default()
-    };
-    let cancellation_token = CancellationToken::new();
-    let request_handle = tokio::spawn({
-        let session = Arc::clone(&session);
-        let turn_context = Arc::clone(&turn_context);
-        let requested_permissions = requested_permissions.clone();
-        let cancellation_token = cancellation_token.clone();
-        async move {
-            session
-                .request_permissions(
-                    &turn_context,
-                    "perm-call-cancelled".to_string(),
-                    RequestPermissionsArgs {
-                        reason: Some("need network".to_string()),
-                        permissions: requested_permissions,
-                    },
-                    cancellation_token,
-                )
-                .await
-        }
-    });
-
-    timeout(Duration::from_secs(5), async {
-        loop {
-            let event = rx_event.recv().await.expect("event channel should be open");
-            if matches!(
-                event.msg,
-                codex_protocol::protocol::EventMsg::GuardianAssessment(_)
-            ) {
-                break;
-            }
-        }
-    })
-    .await
-    .expect("guardian review should start before cancellation");
-
-    cancellation_token.cancel();
-
-    let response = timeout(Duration::from_secs(5), request_handle)
-        .await
-        .expect("request_permissions should stop when cancelled")
-        .expect("request_permissions task should not panic");
-    assert_eq!(
-        response,
-        Some(RequestPermissionsResponse {
-            permissions: RequestPermissionProfile::default(),
-            scope: PermissionGrantScope::Turn,
-        })
-    );
-    assert_eq!(session.granted_turn_permissions().await, None);
 }
 
 #[tokio::test]
@@ -341,7 +240,6 @@ async fn guardian_allows_shell_additional_permissions_requests_past_policy_valid
         .handle(ToolInvocation {
             session: Arc::clone(&session),
             turn: Arc::clone(&turn_context),
-            cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
             call_id: "test-call".to_string(),
             tool_name: codex_tools::ToolName::plain("shell"),
@@ -408,7 +306,6 @@ async fn guardian_allows_unified_exec_additional_permissions_requests_past_polic
         .handle(ToolInvocation {
             session: Arc::clone(&session),
             turn: Arc::clone(&turn_context),
-            cancellation_token: CancellationToken::new(),
             tracker: Arc::clone(&tracker),
             call_id: "exec-call".to_string(),
             tool_name: codex_tools::ToolName::plain("exec_command"),
@@ -522,7 +419,6 @@ async fn shell_handler_allows_sticky_turn_permissions_without_inline_request_per
         .handle(ToolInvocation {
             session: Arc::clone(&session),
             turn: Arc::clone(&turn_context),
-            cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
             call_id: "sticky-turn-grant".to_string(),
             tool_name: codex_tools::ToolName::plain("shell"),

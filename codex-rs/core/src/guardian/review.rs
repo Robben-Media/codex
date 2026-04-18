@@ -336,6 +336,23 @@ pub(crate) async fn review_approval_request_with_cancel(
     .await
 }
 
+pub(crate) fn spawn_approval_request_review(
+    session: Arc<Session>,
+    turn: Arc<TurnContext>,
+    review_id: String,
+    request: GuardianApprovalRequest,
+    retry_reason: Option<String>,
+) -> oneshot::Receiver<ReviewDecision> {
+    spawn_approval_request_review_task(
+        session,
+        turn,
+        review_id,
+        request,
+        retry_reason,
+        /*cancel_token*/ None,
+    )
+}
+
 pub(crate) fn spawn_approval_request_review_with_cancel(
     session: Arc<Session>,
     turn: Arc<TurnContext>,
@@ -343,6 +360,24 @@ pub(crate) fn spawn_approval_request_review_with_cancel(
     request: GuardianApprovalRequest,
     retry_reason: Option<String>,
     cancel_token: CancellationToken,
+) -> oneshot::Receiver<ReviewDecision> {
+    spawn_approval_request_review_task(
+        session,
+        turn,
+        review_id,
+        request,
+        retry_reason,
+        Some(cancel_token),
+    )
+}
+
+fn spawn_approval_request_review_task(
+    session: Arc<Session>,
+    turn: Arc<TurnContext>,
+    review_id: String,
+    request: GuardianApprovalRequest,
+    retry_reason: Option<String>,
+    cancel_token: Option<CancellationToken>,
 ) -> oneshot::Receiver<ReviewDecision> {
     let (tx, rx) = oneshot::channel();
     std::thread::spawn(move || {
@@ -353,14 +388,23 @@ pub(crate) fn spawn_approval_request_review_with_cancel(
             let _ = tx.send(ReviewDecision::Denied);
             return;
         };
-        let decision = runtime.block_on(review_approval_request_with_cancel(
-            &session,
-            &turn,
-            review_id,
-            request,
-            retry_reason,
-            cancel_token,
-        ));
+        let decision = match cancel_token {
+            Some(cancel_token) => runtime.block_on(review_approval_request_with_cancel(
+                &session,
+                &turn,
+                review_id,
+                request,
+                retry_reason,
+                cancel_token,
+            )),
+            None => runtime.block_on(review_approval_request(
+                &session,
+                &turn,
+                review_id,
+                request,
+                retry_reason,
+            )),
+        };
         let _ = tx.send(decision);
     });
     rx
