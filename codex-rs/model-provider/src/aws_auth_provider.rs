@@ -33,6 +33,13 @@ impl AwsSigV4AuthProvider {
 impl AuthProvider for AwsSigV4AuthProvider {
     fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
 
+    /// AWS SigV4 requests are sent to OpenAI-compatible provider endpoints, not
+    /// Codex's legacy Responses backend, so avoid signing and forwarding the
+    /// Codex-private `session_id` compatibility header.
+    fn should_send_legacy_conversation_header(&self) -> bool {
+        false
+    }
+
     async fn apply_auth(&self, mut request: Request) -> Result<Request, String> {
         let body = request.prepare_body_for_send()?;
         let context = self.context().await?;
@@ -49,5 +56,23 @@ impl AuthProvider for AwsSigV4AuthProvider {
         request.url = signed.url;
         request.headers = signed.headers;
         Ok(request)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use codex_api::AuthProvider;
+
+    use super::*;
+
+    #[test]
+    fn aws_sigv4_auth_disables_legacy_conversation_header() {
+        let provider = AwsSigV4AuthProvider::new(AwsAuthConfig {
+            region: Some("us-east-1".to_string()),
+            profile: Some("codex-bedrock".to_string()),
+            service: "bedrock-mantle".to_string(),
+        });
+
+        assert!(!provider.should_send_legacy_conversation_header());
     }
 }
