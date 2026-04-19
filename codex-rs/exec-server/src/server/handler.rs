@@ -22,6 +22,8 @@ use crate::protocol::FsRemoveParams;
 use crate::protocol::FsRemoveResponse;
 use crate::protocol::FsWriteFileParams;
 use crate::protocol::FsWriteFileResponse;
+use crate::protocol::HttpRequestParams;
+use crate::protocol::HttpRequestResponse;
 use crate::protocol::InitializeParams;
 use crate::protocol::InitializeResponse;
 use crate::protocol::ReadParams;
@@ -201,6 +203,14 @@ impl ExecServerHandler {
     ) -> Result<FsCopyResponse, JSONRPCErrorError> {
         self.require_initialized_for("filesystem")?;
         self.file_system.copy(params).await
+    }
+
+    pub(crate) async fn http_request(
+        &self,
+        params: HttpRequestParams,
+    ) -> Result<HttpRequestResponse, JSONRPCErrorError> {
+        self.require_initialized_for("http")?;
+        crate::http_request::run_http_request(params, self.notifications.clone()).await
     }
 
     fn require_initialized_for(
