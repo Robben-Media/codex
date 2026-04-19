@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fs;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -9,11 +10,13 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::Json;
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::http::Method;
 use axum::http::Request;
 use axum::http::StatusCode;
 use axum::http::header::AUTHORIZATION;
 use axum::http::header::CONTENT_TYPE;
+use axum::http::header::HOST;
 use axum::middleware;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -317,7 +320,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(err) => return Err(err.into()),
         }
     };
-    eprintln!("starting rmcp streamable http test server on http://{bind_addr}/mcp");
+    let actual_bind_addr = listener.local_addr()?;
+    if let Ok(bound_addr_file) = std::env::var("MCP_STREAMABLE_HTTP_BOUND_ADDR_FILE") {
+        fs::write(bound_addr_file, actual_bind_addr.to_string())?;
+    }
+    eprintln!("starting rmcp streamable http test server on http://{actual_bind_addr}/mcp");
 
     let router = Router::new()
         .route(
@@ -327,8 +334,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/.well-known/oauth-authorization-server/mcp",
             get({
-                move || async move {
-                    let metadata_base = format!("http://{bind_addr}");
+                move |headers: HeaderMap| async move {
+                    let metadata_base = headers
+                        .get(HOST)
+                        .and_then(|value| value.to_str().ok())
+                        .map(|host| format!("http://{host}"))
+                        .unwrap_or_else(|| format!("http://{actual_bind_addr}"));
                     #[expect(clippy::expect_used)]
                     Response::builder()
                         .status(StatusCode::OK)
