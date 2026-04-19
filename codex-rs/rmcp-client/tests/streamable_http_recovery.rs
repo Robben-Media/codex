@@ -1,9 +1,13 @@
 use std::net::TcpListener;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::time::Duration;
 use std::time::Instant;
 
+use anyhow::Context as _;
 use codex_config::types::OAuthCredentialsStoreMode;
+use codex_exec_server::ExecServerClient;
+use codex_exec_server::RemoteExecServerConnectArgs;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use codex_rmcp_client::RmcpClient;
@@ -18,6 +22,9 @@ use rmcp::model::Implementation;
 use rmcp::model::InitializeRequestParams;
 use rmcp::model::ProtocolVersion;
 use serde_json::json;
+use tempfile::TempDir;
+use tokio::io::AsyncBufReadExt;
+use tokio::io::BufReader;
 use tokio::net::TcpStream;
 use tokio::process::Child;
 use tokio::process::Command;
@@ -100,6 +107,42 @@ async fn create_client(base_url: &str) -> anyhow::Result<RmcpClient> {
     Ok(client)
 }
 
+/// Creates a Streamable HTTP RMCP client that sends traffic through exec-server.
+async fn create_environment_client(
+    base_url: &str,
+    exec_client: ExecServerClient,
+) -> anyhow::Result<RmcpClient> {
+    let client = RmcpClient::new_environment_streamable_http_client(
+        "test-streamable-http-environment",
+        &format!("{base_url}/mcp"),
+        Some("test-bearer".to_string()),
+        /*http_headers*/ None,
+        /*env_http_headers*/ None,
+        OAuthCredentialsStoreMode::File,
+        exec_client,
+    )
+    .await?;
+
+    client
+        .initialize(
+            init_params(),
+            Some(Duration::from_secs(5)),
+            Box::new(|_, _| {
+                async {
+                    Ok(ElicitationResponse {
+                        action: ElicitationAction::Accept,
+                        content: Some(json!({})),
+                        meta: None,
+                    })
+                }
+                .boxed()
+            }),
+        )
+        .await?;
+
+    Ok(client)
+}
+
 async fn call_echo_tool(client: &RmcpClient, message: &str) -> anyhow::Result<CallToolResult> {
     client
         .call_tool(
@@ -145,6 +188,72 @@ async fn spawn_streamable_http_server() -> anyhow::Result<(Child, String)> {
     Ok((child, base_url))
 }
 
+/// Owns the exec-server process used by the environment-client integration test.
+struct ExecServerProcess {
+    _codex_home: TempDir,
+    child: Child,
+    client: ExecServerClient,
+}
+
+impl Drop for ExecServerProcess {
+    /// Stops the local exec-server process best-effort when the test exits.
+    fn drop(&mut self) {
+        let _ = self.child.start_kill();
+    }
+}
+
+/// Starts a local exec-server and connects an initialized `ExecServerClient`.
+async fn spawn_exec_server() -> anyhow::Result<ExecServerProcess> {
+    let codex_home = TempDir::new()?;
+    let mut child = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+        .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .env("CODEX_HOME", codex_home.path())
+        .spawn()?;
+
+    let websocket_url = read_exec_server_listen_url(&mut child).await?;
+    let client = ExecServerClient::connect_websocket(RemoteExecServerConnectArgs::new(
+        websocket_url,
+        "rmcp-client-environment-http-test".to_string(),
+    ))
+    .await?;
+
+    Ok(ExecServerProcess {
+        _codex_home: codex_home,
+        child,
+        client,
+    })
+}
+
+/// Reads the websocket URL printed by `codex exec-server --listen`.
+async fn read_exec_server_listen_url(child: &mut Child) -> anyhow::Result<String> {
+    let stdout = child
+        .stdout
+        .take()
+        .context("failed to capture exec-server stdout")?;
+    let mut lines = BufReader::new(stdout).lines();
+    let deadline = Instant::now() + Duration::from_secs(10);
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            anyhow::bail!("timed out waiting for exec-server listen URL");
+        }
+
+        let line = tokio::time::timeout(remaining, lines.next_line())
+            .await
+            .context("timed out waiting for exec-server stdout")??
+            .context("exec-server stdout closed before emitting listen URL")?;
+        let listen_url = line.trim();
+        if listen_url.starts_with("ws://") {
+            return Ok(listen_url.to_string());
+        }
+    }
+}
+
 async fn wait_for_streamable_http_server(
     server_child: &mut Child,
     address: &str,
@@ -184,6 +293,29 @@ async fn wait_for_streamable_http_server(
 
         sleep(Duration::from_millis(50)).await;
     }
+}
+
+/// What this tests: the RMCP environment Streamable HTTP adapter can initialize
+/// a server and call a tool while every MCP HTTP request goes through a real
+/// exec-server process instead of a direct reqwest transport.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn streamable_http_environment_client_round_trips_through_exec_server() -> anyhow::Result<()>
+{
+    // Phase 1: start the MCP Streamable HTTP test server and a local
+    // exec-server process that will own the HTTP network calls.
+    let (_server, base_url) = spawn_streamable_http_server().await?;
+    let exec_server = spawn_exec_server().await?;
+
+    // Phase 2: create and initialize the RMCP client using the executor-backed
+    // Streamable HTTP transport.
+    let client = create_environment_client(&base_url, exec_server.client.clone()).await?;
+
+    // Phase 3: prove the initialized client can complete a tool call and
+    // preserve the normal RMCP response shape.
+    let result = call_echo_tool(&client, "environment").await?;
+    assert_eq!(result, expected_echo_result("environment"));
+
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
