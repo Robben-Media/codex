@@ -228,6 +228,7 @@ mod width;
 
 mod wrapping;
 
+mod table_detect;
 #[cfg(test)]
 pub(crate) mod test_backend;
 #[cfg(test)]

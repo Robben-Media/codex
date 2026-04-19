@@ -2,6 +2,7 @@ use crate::app_backtrack::BacktrackState;
 use crate::app_command::AppCommand;
 use crate::app_command::AppCommandView;
 use crate::app_event::AppEvent;
+use crate::app_event::ConsolidationScrollbackReflow;
 use crate::app_event::ExitMode;
 use crate::app_event::FeedbackCategory;
 use crate::app_event::RateLimitRefreshOrigin;
@@ -3773,6 +3774,23 @@ impl App {
         Ok(())
     }
 
+    fn finish_agent_message_consolidation(
+        &mut self,
+        tui: &mut tui::Tui,
+        scrollback_reflow: ConsolidationScrollbackReflow,
+    ) -> Result<()> {
+        match scrollback_reflow {
+            ConsolidationScrollbackReflow::IfResizeReflowRan => {
+                self.maybe_finish_stream_reflow(tui);
+            }
+            ConsolidationScrollbackReflow::Required => {
+                self.finish_required_stream_reflow(tui)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn should_mark_reflow_as_stream_time(&self) -> bool {
         self.chat_widget.has_active_agent_stream()
             || self.chat_widget.has_active_plan_stream()
@@ -4906,7 +4924,20 @@ impl App {
                     tui.terminal.last_known_screen_size.width,
                 );
             }
-            AppEvent::ConsolidateAgentMessage { source, cwd } => {
+            AppEvent::ConsolidateAgentMessage {
+                source,
+                cwd,
+                scrollback_reflow,
+                deferred_history_cell,
+            } => {
+                if let Some(cell) = deferred_history_cell {
+                    let cell: Arc<dyn HistoryCell> = cell.into();
+                    if let Some(Overlay::Transcript(t)) = &mut self.overlay {
+                        t.insert_cell(cell.clone());
+                    }
+                    self.transcript_cells.push(cell);
+                }
+
                 // Walk backward to find the contiguous run of streaming AgentMessageCells that
                 // belong to the just-finalized stream
                 let end = self.transcript_cells.len();
@@ -4931,7 +4962,7 @@ impl App {
                         tui.frame_requester().schedule_frame();
                     }
 
-                    self.maybe_finish_stream_reflow(tui);
+                    self.finish_agent_message_consolidation(tui, scrollback_reflow)?;
                 } else {
                     tracing::debug!(
                         "ConsolidateAgentMessage: no cells to consolidate(start={start}, end={end})",
