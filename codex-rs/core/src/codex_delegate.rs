@@ -100,7 +100,7 @@ pub(crate) async fn run_codex_thread_interactive(
         inherited_exec_policy: Some(Arc::clone(&parent_session.services.exec_policy)),
         analytics_events_client: Some(parent_session.services.analytics_events_client.clone()),
         parent_trace,
-    })
+    }))
     .await?;
     if parent_session.enabled(codex_features::Feature::GeneralAnalytics) {
         let thread_config = codex.thread_config_snapshot().await;

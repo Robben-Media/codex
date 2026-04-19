@@ -287,6 +287,7 @@ async fn run_guardian_review(
         GuardianReviewOutcome::TimedOut => {
             let result_tag = "timed_out";
             review_span.record("result", result_tag);
+            drop(review_span);
             let rationale =
                 "Automatic approval review timed out while evaluating the requested approval."
                     .to_string();
@@ -328,6 +329,7 @@ async fn run_guardian_review(
         GuardianReviewOutcome::Aborted => {
             let result_tag = guardian_review_result_tag(None, None, true);
             review_span.record("result", result_tag);
+            drop(review_span);
             session
                 .send_event(
                     turn.as_ref(),
@@ -375,6 +377,7 @@ async fn run_guardian_review(
     };
     review_span.record("risk_level", guardian_risk_level_str(assessment.risk_level));
     review_span.record("user_authorization", user_authorization);
+    drop(review_span);
     let warning = format!(
         "Automatic approval review {verdict} (risk: {}, authorization: {user_authorization}): {}",
         guardian_risk_level_str(assessment.risk_level),
@@ -455,7 +458,7 @@ pub(crate) async fn review_approval_request(
         retry_reason,
         None,
         None,
-    )
+    ))
     .await
 }
 
