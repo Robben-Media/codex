@@ -241,6 +241,7 @@ pub async fn process_chat_completions_sse(
         }
         state.usage = chunk.usage.map(Into::into).or(state.usage);
 
+        let mut should_complete = false;
         for choice in chunk.choices {
             if let Some(delta) = choice.delta.reasoning_content {
                 if !state.reasoning_item_started {
@@ -332,9 +333,12 @@ pub async fn process_chat_completions_sse(
                 }
             }
             if choice.finish_reason.is_some() {
-                let _ = emit_completed(&mut state, &tx_event).await;
-                return;
+                should_complete = true;
             }
+        }
+        if should_complete {
+            let _ = emit_completed(&mut state, &tx_event).await;
+            return;
         }
     }
 }
@@ -444,6 +448,36 @@ mod tests {
         let events = collect_events(vec!["not-json".to_string()]).await;
 
         assert!(matches!(events[0], Err(ApiError::Stream(_))));
+    }
+
+    #[tokio::test]
+    async fn finish_reason_processes_later_choices_in_same_chunk() {
+        let events = collect_events(vec![
+            json!({
+                "id": "chatcmpl-choices",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": "first"},
+                        "finish_reason": "stop"
+                    },
+                    {
+                        "index": 1,
+                        "delta": {"content": "second"}
+                    }
+                ]
+            })
+            .to_string(),
+        ])
+        .await;
+
+        assert!(events.iter().any(|event| {
+            matches!(event, Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "second")
+        }));
+        assert!(matches!(
+            events.last(),
+            Some(Ok(ResponseEvent::Completed { response_id, .. })) if response_id == "chatcmpl-choices"
+        ));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use crate::auth::SharedAuthProvider;
 use crate::common::ResponseStream;
 use crate::common::ResponsesApiRequest;
+use crate::common::TextControls;
 use crate::endpoint::session::EndpointSession;
 use crate::error::ApiError;
 use crate::provider::Provider;
@@ -250,12 +251,23 @@ fn chat_completions_request_from_responses(
                 ChatThinkingType::Enabled
             },
         }),
-        response_format: request.text.and_then(|text| {
-            text.format.map(|_| ChatResponseFormat {
-                r#type: "json_object",
-            })
-        }),
+        response_format: chat_response_format(request.text)?,
     })
+}
+
+fn chat_response_format(
+    text: Option<TextControls>,
+) -> Result<Option<ChatResponseFormat>, ApiError> {
+    let Some(text) = text else {
+        return Ok(None);
+    };
+    if text.format.is_some() {
+        return Err(ApiError::InvalidRequest {
+            message: "chat_completions providers do not support JSON schema response formats"
+                .to_string(),
+        });
+    }
+    Ok(None)
 }
 
 fn response_item_to_chat_message(item: ResponseItem) -> Result<Option<ChatMessage>, ApiError> {
@@ -525,20 +537,11 @@ mod tests {
     }
 
     #[test]
-    fn translates_reasoning_and_json_object_format() {
+    fn translates_reasoning() {
         let mut request = base_request();
         request.reasoning = Some(Reasoning {
             effort: Some(ReasoningEffort::None),
             summary: Some(ReasoningSummary::Auto),
-        });
-        request.text = Some(TextControls {
-            verbosity: None,
-            format: Some(TextFormat {
-                r#type: TextFormatType::JsonSchema,
-                strict: true,
-                schema: json!({"type": "object"}),
-                name: "schema".to_string(),
-            }),
         });
 
         let request = chat_completions_request_from_responses(request).unwrap();
@@ -549,12 +552,25 @@ mod tests {
                 r#type: ChatThinkingType::Disabled,
             })
         );
-        assert_eq!(
-            request.response_format,
-            Some(ChatResponseFormat {
-                r#type: "json_object",
-            })
-        );
+        assert_eq!(request.response_format, None);
+    }
+
+    #[test]
+    fn rejects_json_schema_response_format() {
+        let mut request = base_request();
+        request.text = Some(TextControls {
+            verbosity: None,
+            format: Some(TextFormat {
+                r#type: TextFormatType::JsonSchema,
+                strict: true,
+                schema: json!({"type": "object"}),
+                name: "schema".to_string(),
+            }),
+        });
+
+        let err = chat_completions_request_from_responses(request).unwrap_err();
+
+        assert!(matches!(err, ApiError::InvalidRequest { .. }));
     }
 
     #[test]
