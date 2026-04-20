@@ -7,7 +7,10 @@ use codex_config::types::AuthCredentialsStoreMode;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_model_provider_info::WireApi;
+use codex_model_provider_info::ZAI_PROVIDER_ID;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::config_types::ModelProviderAuthInfo;
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::responses::mount_models_once;
@@ -105,6 +108,54 @@ fn provider_for(base_url: String) -> ModelProviderInfo {
         requires_openai_auth: false,
         supports_websockets: false,
     }
+}
+
+#[tokio::test]
+async fn zai_provider_uses_builtin_glm_5_1_catalog() {
+    let codex_home = tempdir().expect("temp dir");
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("unused"));
+    let mut providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .remove(ZAI_PROVIDER_ID)
+        .expect("zai provider exists");
+    let manager = ModelsManager::with_provider_for_tests(
+        codex_home.path().to_path_buf(),
+        auth_manager,
+        provider,
+    );
+
+    let models = manager.list_models(RefreshStrategy::OnlineIfUncached).await;
+
+    assert_eq!(models.len(), 1);
+    let model = &models[0];
+    assert_eq!(model.model, "glm-5.1");
+    assert_eq!(model.display_name, "GLM-5.1");
+    assert_eq!(model.input_modalities, vec![InputModality::Text]);
+    assert!(model.is_default);
+
+    let info = manager
+        .get_model_info("glm-5.1", &ModelsManagerConfig::default())
+        .await;
+    assert_eq!(info.context_window, Some(204_800));
+    assert_eq!(info.max_context_window, Some(204_800));
+    assert_eq!(info.auto_compact_token_limit, Some(190_000));
+}
+
+#[tokio::test]
+async fn openai_provider_catalog_does_not_include_glm_5_1() {
+    let codex_home = tempdir().expect("temp dir");
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("unused"));
+    let mut providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers.remove("openai").expect("openai provider exists");
+    let manager = ModelsManager::with_provider_for_tests(
+        codex_home.path().to_path_buf(),
+        auth_manager,
+        provider,
+    );
+
+    let models = manager.list_models(RefreshStrategy::Offline).await;
+
+    assert!(!models.iter().any(|model| model.model == "glm-5.1"));
 }
 
 struct ProviderAuthScript {

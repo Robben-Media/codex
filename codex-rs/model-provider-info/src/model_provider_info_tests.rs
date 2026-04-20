@@ -117,6 +117,45 @@ wire_api = "chat"
 }
 
 #[test]
+fn test_deserialize_chat_completions_model_provider_toml() {
+    let provider_toml = r#"
+name = "Z.ai Coding"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat_completions"
+        "#;
+
+    let provider: ModelProviderInfo = toml::from_str(provider_toml).unwrap();
+    assert_eq!(provider.wire_api, WireApi::ChatCompletions);
+}
+
+#[test]
+fn test_serialize_chat_completions_wire_api() {
+    let provider = create_zai_provider();
+    let serialized = match toml::to_string(&provider) {
+        Ok(serialized) => serialized,
+        Err(err) => panic!("zai provider should serialize: {err}"),
+    };
+
+    assert!(serialized.contains(r#"wire_api = "chat_completions""#));
+}
+
+#[test]
+fn test_builtin_zai_model_provider() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .get(ZAI_PROVIDER_ID)
+        .expect("zai provider should be built in");
+
+    assert_eq!(provider.name, "Z.ai Coding");
+    assert_eq!(provider.base_url.as_deref(), Some(ZAI_CODING_BASE_URL));
+    assert_eq!(provider.env_key.as_deref(), Some(ZAI_API_KEY_ENV_VAR));
+    assert_eq!(provider.wire_api, WireApi::ChatCompletions);
+    assert!(!provider.supports_websockets);
+    assert!(!provider.requires_openai_auth);
+}
+
+#[test]
 fn test_deserialize_websocket_connect_timeout() {
     let provider_toml = r#"
 name = "OpenAI"

@@ -88,6 +88,29 @@ same bundle. If the file is empty, unreadable, or malformed, the affected Codex
 HTTP or secure websocket connection reports a user-facing error that points
 back to these environment variables.
 
+## Z.ai GLM Coding Plan
+
+Codex includes a built-in `zai` model provider for GLM-5.1 through Z.ai's
+Coding API. Set your Z.ai API key in the environment and select the provider
+and model in `~/.codex/config.toml`:
+
+```shell
+export ZAI_API_KEY=your_zai_api_key
+```
+
+```toml
+model_provider = "zai"
+model = "glm-5.1"
+```
+
+The built-in provider uses the Z.ai Coding endpoint
+`https://api.z.ai/api/coding/paas/v4`, not the general Z.ai API endpoint.
+GLM-5.1 is exposed through an OpenAI-compatible Chat Completions wire protocol
+and does not use the Responses API or Responses WebSocket transport.
+
+This integration is text-only. Image input is not enabled for `glm-5.1` until
+Z.ai's coding-agent documentation explicitly supports images for this path.
+
 ## Notices
 
 Codex stores "do not show again" flags for some UI prompts under the `[notice]` table.
