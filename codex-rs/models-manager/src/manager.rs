@@ -216,6 +216,7 @@ impl ModelsManager {
         collaboration_modes_config: CollaborationModesConfig,
         provider_info: ModelProviderInfo,
     ) -> Self {
+        let is_zai_provider = provider_info.is_zai();
         let model_provider = create_model_provider(provider_info, Some(auth_manager));
         let cache_path = codex_home.join(MODEL_CACHE_FILE);
         let cache_manager = ModelsCacheManager::new(cache_path, DEFAULT_MODEL_CACHE_TTL);
@@ -226,7 +227,13 @@ impl ModelsManager {
         };
         let remote_models = model_catalog
             .map(|catalog| catalog.models)
-            .unwrap_or_else(|| Self::load_remote_models_from_file().unwrap_or_default());
+            .unwrap_or_else(|| {
+                if is_zai_provider {
+                    vec![model_info::zai_glm_5_1_model_info()]
+                } else {
+                    Self::load_remote_models_from_file().unwrap_or_default()
+                }
+            });
         Self {
             remote_models: RwLock::new(remote_models),
             catalog_mode,
@@ -394,6 +401,9 @@ impl ModelsManager {
     async fn refresh_available_models(&self, refresh_strategy: RefreshStrategy) -> CoreResult<()> {
         // don't override the custom model catalog if one was provided by the user
         if matches!(self.catalog_mode, CatalogMode::Custom) {
+            return Ok(());
+        }
+        if self.provider.info().is_zai() {
             return Ok(());
         }
 
