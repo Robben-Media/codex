@@ -7717,7 +7717,9 @@ impl ChatWidget {
 
     fn open_rate_limit_switch_prompt(&mut self, preset: ModelPreset) {
         let switch_model = preset.model;
+        let switch_model_provider = preset.model_provider;
         let switch_model_for_events = switch_model.clone();
+        let switch_model_provider_for_events = switch_model_provider;
         let default_effort: ReasoningEffortConfig = preset.default_reasoning_effort;
 
         let switch_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
@@ -7737,7 +7739,10 @@ impl ChatWidget {
                 )
                 .into_core(),
             ));
-            tx.send(AppEvent::UpdateModel(switch_model_for_events.clone()));
+            tx.send(AppEvent::UpdateModel {
+                model: switch_model_for_events.clone(),
+                model_provider: switch_model_provider_for_events.clone(),
+            });
             tx.send(AppEvent::UpdateReasoningEffort(Some(default_effort)));
         })];
 
@@ -8112,12 +8117,14 @@ impl ChatWidget {
                 let description =
                     (!preset.description.is_empty()).then_some(preset.description.clone());
                 let model = preset.model.clone();
+                let model_provider = preset.model_provider.clone();
                 let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
                     model.as_str(),
                     Some(preset.default_reasoning_effort),
                 );
                 let actions = Self::model_selection_actions(
                     model.clone(),
+                    model_provider,
                     Some(preset.default_reasoning_effort),
                     should_prompt_plan_mode_scope,
                 );
@@ -8274,6 +8281,7 @@ impl ChatWidget {
 
     fn model_selection_actions(
         model_for_action: String,
+        model_provider_for_action: String,
         effort_for_action: Option<ReasoningEffortConfig>,
         should_prompt_plan_mode_scope: bool,
     ) -> Vec<SelectionAction> {
@@ -8286,10 +8294,14 @@ impl ChatWidget {
                 return;
             }
 
-            tx.send(AppEvent::UpdateModel(model_for_action.clone()));
+            tx.send(AppEvent::UpdateModel {
+                model: model_for_action.clone(),
+                model_provider: model_provider_for_action.clone(),
+            });
             tx.send(AppEvent::UpdateReasoningEffort(effort_for_action));
             tx.send(AppEvent::PersistModelSelection {
                 model: model_for_action.clone(),
+                model_provider: model_provider_for_action.clone(),
                 effort: effort_for_action,
             });
         })]
@@ -8357,19 +8369,28 @@ impl ChatWidget {
 
         let plan_only_actions: Vec<SelectionAction> = vec![Box::new({
             let model = model.clone();
+            let model_provider = self.config.model_provider_id.clone();
             move |tx| {
-                tx.send(AppEvent::UpdateModel(model.clone()));
+                tx.send(AppEvent::UpdateModel {
+                    model: model.clone(),
+                    model_provider: model_provider.clone(),
+                });
                 tx.send(AppEvent::UpdatePlanModeReasoningEffort(effort));
                 tx.send(AppEvent::PersistPlanModeReasoningEffort(effort));
             }
         })];
+        let model_provider = self.config.model_provider_id.clone();
         let all_modes_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-            tx.send(AppEvent::UpdateModel(model.clone()));
+            tx.send(AppEvent::UpdateModel {
+                model: model.clone(),
+                model_provider: model_provider.clone(),
+            });
             tx.send(AppEvent::UpdateReasoningEffort(effort));
             tx.send(AppEvent::UpdatePlanModeReasoningEffort(effort));
             tx.send(AppEvent::PersistPlanModeReasoningEffort(effort));
             tx.send(AppEvent::PersistModelSelection {
                 model: model.clone(),
+                model_provider: model_provider.clone(),
                 effort,
             });
         })];
@@ -8452,6 +8473,7 @@ impl ChatWidget {
         if choices.len() == 1 {
             let selected_effort = choices.first().and_then(|c| c.stored);
             let selected_model = preset.model;
+            let selected_model_provider = preset.model_provider;
             if self.should_prompt_plan_mode_reasoning_scope(&selected_model, selected_effort) {
                 self.app_event_tx
                     .send(AppEvent::OpenPlanReasoningScopePrompt {
@@ -8459,7 +8481,11 @@ impl ChatWidget {
                         effort: selected_effort,
                     });
             } else {
-                self.apply_model_and_effort(selected_model, selected_effort);
+                self.apply_model_and_effort(
+                    selected_model,
+                    selected_model_provider,
+                    selected_effort,
+                );
             }
             return;
         }
@@ -8473,6 +8499,7 @@ impl ChatWidget {
             .or(Some(default_effort));
 
         let model_slug = preset.model.to_string();
+        let model_provider = preset.model_provider.to_string();
         let is_current_model = self.current_model() == preset.model.as_str();
         let highlight_choice = if is_current_model {
             if in_plan_mode {
@@ -8524,6 +8551,7 @@ impl ChatWidget {
             };
 
             let model_for_action = model_slug.clone();
+            let model_provider_for_action = model_provider.clone();
             let choice_effort = choice.stored;
             let should_prompt_plan_mode_scope =
                 self.should_prompt_plan_mode_reasoning_scope(model_slug.as_str(), choice_effort);
@@ -8534,10 +8562,14 @@ impl ChatWidget {
                         effort: choice_effort,
                     });
                 } else {
-                    tx.send(AppEvent::UpdateModel(model_for_action.clone()));
+                    tx.send(AppEvent::UpdateModel {
+                        model: model_for_action.clone(),
+                        model_provider: model_provider_for_action.clone(),
+                    });
                     tx.send(AppEvent::UpdateReasoningEffort(choice_effort));
                     tx.send(AppEvent::PersistModelSelection {
                         model: model_for_action.clone(),
+                        model_provider: model_provider_for_action.clone(),
                         effort: choice_effort,
                     });
                 }
@@ -8582,17 +8614,29 @@ impl ChatWidget {
     fn apply_model_and_effort_without_persist(
         &self,
         model: String,
+        model_provider: String,
         effort: Option<ReasoningEffortConfig>,
     ) {
-        self.app_event_tx.send(AppEvent::UpdateModel(model));
+        self.app_event_tx.send(AppEvent::UpdateModel {
+            model,
+            model_provider,
+        });
         self.app_event_tx
             .send(AppEvent::UpdateReasoningEffort(effort));
     }
 
-    fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
-        self.apply_model_and_effort_without_persist(model.clone(), effort);
-        self.app_event_tx
-            .send(AppEvent::PersistModelSelection { model, effort });
+    fn apply_model_and_effort(
+        &self,
+        model: String,
+        model_provider: String,
+        effort: Option<ReasoningEffortConfig>,
+    ) {
+        self.apply_model_and_effort_without_persist(model.clone(), model_provider.clone(), effort);
+        self.app_event_tx.send(AppEvent::PersistModelSelection {
+            model,
+            model_provider,
+            effort,
+        });
     }
 
     /// Open the permissions popup (alias for /permissions).

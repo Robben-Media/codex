@@ -114,6 +114,7 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,
             model: session_model,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

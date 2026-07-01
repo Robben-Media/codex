@@ -4,9 +4,30 @@ use codex_client::RetryOn;
 use codex_client::RetryPolicy;
 use http::Method;
 use http::header::HeaderMap;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::time::Duration;
 use url::Url;
+
+/// Wire-level APIs supported by a provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WireApi {
+    Responses,
+    ZaiChat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ZaiThinkingType {
+    Enabled,
+    Disabled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ZaiThinkingConfig {
+    pub r#type: ZaiThinkingType,
+    pub clear_thinking: bool,
+}
 
 /// High-level retry configuration for a provider.
 ///
@@ -44,9 +65,11 @@ pub struct Provider {
     pub name: String,
     pub base_url: String,
     pub query_params: Option<HashMap<String, String>>,
+    pub wire_api: WireApi,
     pub headers: HeaderMap,
     pub retry: RetryConfig,
     pub stream_idle_timeout: Duration,
+    pub zai_thinking: Option<ZaiThinkingConfig>,
 }
 
 impl Provider {
@@ -86,7 +109,12 @@ impl Provider {
     }
 
     pub fn is_azure_responses_endpoint(&self) -> bool {
-        is_azure_responses_provider(&self.name, Some(&self.base_url))
+        self.wire_api == WireApi::Responses
+            && is_azure_responses_provider(&self.name, Some(&self.base_url))
+    }
+
+    pub fn is_zai_chat(&self) -> bool {
+        self.wire_api == WireApi::ZaiChat
     }
 
     pub fn websocket_url_for_path(&self, path: &str) -> Result<Url, url::ParseError> {

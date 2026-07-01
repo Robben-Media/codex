@@ -437,6 +437,7 @@ mod tests {
             }),
             last_refresh: Some(Utc::now()),
             agent_identity: None,
+            provider_auth: None,
         };
         save_auth(tempdir.path(), &auth_json, AuthCredentialsStoreMode::File).expect("save auth");
         CodexAuth::from_auth_storage(tempdir.path(), AuthCredentialsStoreMode::File)

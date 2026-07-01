@@ -20,6 +20,7 @@ use codex_login::default_client::build_reqwest_client;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErr;
@@ -532,6 +533,23 @@ impl ModelsManager {
             .and_then(|auth_manager| auth_manager.auth_mode());
         let chatgpt_mode = matches!(auth_mode, Some(AuthMode::Chatgpt));
         presets = ModelPreset::filter_by_auth(presets, chatgpt_mode);
+        let zai_configured = self
+            .provider
+            .auth_manager()
+            .and_then(|auth_manager| {
+                auth_manager.provider_api_key(ZAI_PROVIDER_ID, Some("ZAI_API_KEY"))
+            })
+            .is_some()
+            || std::env::var("ZAI_API_KEY")
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty());
+        if !zai_configured {
+            for preset in &mut presets {
+                if preset.model_provider == ZAI_PROVIDER_ID {
+                    preset.show_in_picker = false;
+                }
+            }
+        }
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
 

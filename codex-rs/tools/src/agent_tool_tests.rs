@@ -11,6 +11,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
     ModelPreset {
         id: id.to_string(),
         model: format!("{id}-model"),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: format!("{id} display"),
         description: format!("{id} description"),
         default_reasoning_effort: ReasoningEffort::Medium,

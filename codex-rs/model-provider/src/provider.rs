@@ -6,9 +6,11 @@ use codex_api::SharedAuthProvider;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::ZAI_PROVIDER_ID;
 
 use crate::auth::auth_manager_for_provider;
 use crate::auth::resolve_provider_auth;
+use crate::bearer_auth_provider::BearerAuthProvider;
 
 /// Runtime provider abstraction used by model execution.
 ///
@@ -40,6 +42,17 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
 
     /// Returns the auth provider used to attach request credentials.
     async fn api_auth(&self) -> codex_protocol::error::Result<SharedAuthProvider> {
+        if self.info().is_zai()
+            && let Some(auth_manager) = self.auth_manager()
+            && let Some(token) =
+                auth_manager.provider_api_key(ZAI_PROVIDER_ID, self.info().env_key.as_deref())
+        {
+            return Ok(Arc::new(BearerAuthProvider {
+                token: Some(token),
+                account_id: None,
+                is_fedramp_account: false,
+            }));
+        }
         let auth = self.auth().await;
         resolve_provider_auth(auth.as_ref(), self.info())
     }

@@ -19,6 +19,7 @@ fn blocking_set_model_top_level() {
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: Some("gpt-5.1-codex".to_string()),
+            model_provider: None,
             effort: Some(ReasoningEffort::High),
         }],
     )
@@ -153,6 +154,7 @@ profiles = { fast = { model = "gpt-4o", sandbox_mode = "strict" } }
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: Some("o4-mini".to_string()),
+            model_provider: None,
             effort: None,
         }],
     )
@@ -198,6 +200,7 @@ fn blocking_set_model_writes_through_symlink_chain() {
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: Some("gpt-5.1-codex".to_string()),
+            model_provider: None,
             effort: Some(ReasoningEffort::High),
         }],
     )
@@ -231,6 +234,7 @@ fn blocking_set_model_replaces_symlink_on_cycle() {
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: Some("gpt-5.1-codex".to_string()),
+            model_provider: None,
             effort: None,
         }],
     )
@@ -325,6 +329,7 @@ profiles = { fast = { model = "gpt-4o", sandbox_mode = "strict" } }
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: None,
+            model_provider: None,
             effort: Some(ReasoningEffort::High),
         }],
     )
@@ -359,6 +364,7 @@ model_reasoning_effort = "low"
         /*profile*/ None,
         &[ConfigEdit::SetModel {
             model: Some("o5-preview".to_string()),
+            model_provider: None,
             effort: Some(ReasoningEffort::Minimal),
         }],
     )
@@ -391,6 +397,7 @@ model = "gpt-5.1-codex"
         Some("team a"),
         &[ConfigEdit::SetModel {
             model: Some("o4-mini".to_string()),
+            model_provider: None,
             effort: None,
         }],
     )

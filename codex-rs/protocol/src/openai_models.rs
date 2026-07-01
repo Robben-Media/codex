@@ -21,6 +21,11 @@ use crate::config_types::Verbosity;
 
 const PERSONALITY_PLACEHOLDER: &str = "{{ personality }}";
 pub const SPEED_TIER_FAST: &str = "fast";
+pub const DEFAULT_MODEL_PROVIDER: &str = "openai";
+
+pub fn default_model_provider() -> String {
+    DEFAULT_MODEL_PROVIDER.to_string()
+}
 
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning
 #[derive(
@@ -122,6 +127,9 @@ pub struct ModelPreset {
     pub id: String,
     /// Model slug (e.g., "gpt-5").
     pub model: String,
+    /// Provider that owns this model slug.
+    #[serde(default = "default_model_provider")]
+    pub model_provider: String,
     /// Display name shown in UIs.
     pub display_name: String,
     /// Short human description shown in UIs.
@@ -247,6 +255,8 @@ const fn default_effective_context_window_percent() -> i64 {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema)]
 pub struct ModelInfo {
     pub slug: String,
+    #[serde(default = "default_model_provider")]
+    pub model_provider: String,
     pub display_name: String,
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -434,6 +444,7 @@ impl From<ModelInfo> for ModelPreset {
         ModelPreset {
             id: info.slug.clone(),
             model: info.slug.clone(),
+            model_provider: info.model_provider.clone(),
             display_name: info.display_name,
             description: info.description.unwrap_or_default(),
             default_reasoning_effort: info
@@ -539,6 +550,7 @@ mod tests {
     fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
         ModelInfo {
             slug: "test-model".to_string(),
+            model_provider: crate::openai_models::default_model_provider(),
             display_name: "Test Model".to_string(),
             description: None,
             default_reasoning_level: None,

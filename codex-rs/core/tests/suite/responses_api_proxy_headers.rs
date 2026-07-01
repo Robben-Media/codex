@@ -144,6 +144,7 @@ async fn submit_turn_with_timeout(test: &TestCodex, prompt: &str) -> Result<()> 
                 exclude_slash_tmp: false,
             },
             model: session_model,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

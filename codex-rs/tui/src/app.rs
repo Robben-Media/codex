@@ -955,10 +955,18 @@ async fn handle_model_migration_prompt_if_needed(
 
                 config.model = Some(target_model.clone());
                 config.model_reasoning_effort = mapped_effort;
-                app_event_tx.send(AppEvent::UpdateModel(target_model.clone()));
+                let target_model_provider =
+                    target_preset_for_upgrade(available_models, &target_model)
+                        .map(|preset| preset.model_provider.clone())
+                        .unwrap_or_else(codex_protocol::openai_models::default_model_provider);
+                app_event_tx.send(AppEvent::UpdateModel {
+                    model: target_model.clone(),
+                    model_provider: target_model_provider.clone(),
+                });
                 app_event_tx.send(AppEvent::UpdateReasoningEffort(mapped_effort));
                 app_event_tx.send(AppEvent::PersistModelSelection {
                     model: target_model.clone(),
+                    model_provider: target_model_provider,
                     effort: mapped_effort,
                 });
             }
@@ -2495,6 +2503,7 @@ impl App {
                 approvals_reviewer,
                 sandbox_policy,
                 model,
+                model_provider: _,
                 effort,
                 summary,
                 service_tier,
@@ -5003,8 +5012,29 @@ impl App {
             AppEvent::UpdateReasoningEffort(effort) => {
                 self.on_update_reasoning_effort(effort);
             }
-            AppEvent::UpdateModel(model) => {
+            AppEvent::UpdateModel {
+                model,
+                model_provider,
+            } => {
+                self.config.model_provider_id = model_provider.clone();
+                if let Some(provider) = self.config.model_providers.get(&model_provider).cloned() {
+                    self.config.model_provider = provider;
+                }
                 self.chat_widget.set_model(&model);
+                self.chat_widget.submit_op(Op::OverrideTurnContext {
+                    cwd: None,
+                    approval_policy: None,
+                    approvals_reviewer: None,
+                    sandbox_policy: None,
+                    windows_sandbox_level: None,
+                    model: Some(model),
+                    model_provider: Some(model_provider),
+                    effort: None,
+                    summary: None,
+                    service_tier: None,
+                    collaboration_mode: None,
+                    personality: None,
+                });
             }
             AppEvent::UpdateCollaborationMode(mask) => {
                 self.chat_widget.set_collaboration_mask(mask);
@@ -5406,11 +5436,19 @@ impl App {
                     let _ = (preset, mode);
                 }
             }
-            AppEvent::PersistModelSelection { model, effort } => {
+            AppEvent::PersistModelSelection {
+                model,
+                model_provider,
+                effort,
+            } => {
                 let profile = self.active_profile.as_deref();
                 match ConfigEditsBuilder::new(&self.config.codex_home)
                     .with_profile(profile)
-                    .set_model(Some(model.as_str()), effort)
+                    .set_model_with_provider(
+                        Some(model.as_str()),
+                        Some(model_provider.as_str()),
+                        effort,
+                    )
                     .apply()
                     .await
                 {
@@ -8714,6 +8752,7 @@ mod tests {
                 sandbox_policy: Some(guardian_approvals.sandbox_policy.clone()),
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,
@@ -8805,6 +8844,7 @@ mod tests {
                 sandbox_policy: None,
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,
@@ -8884,6 +8924,7 @@ mod tests {
                 sandbox_policy: Some(guardian_approvals.sandbox_policy.clone()),
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,
@@ -8941,6 +8982,7 @@ mod tests {
                 sandbox_policy: None,
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,
@@ -9000,6 +9042,7 @@ mod tests {
                 sandbox_policy: Some(guardian_approvals.sandbox_policy.clone()),
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,
@@ -9087,6 +9130,7 @@ guardian_approval = true
                 sandbox_policy: None,
                 windows_sandbox_level: None,
                 model: None,
+                model_provider: None,
                 effort: None,
                 summary: None,
                 service_tier: None,

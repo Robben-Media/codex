@@ -6,6 +6,7 @@ pub(crate) mod realtime_websocket;
 pub(crate) mod responses;
 pub(crate) mod responses_websocket;
 mod session;
+pub(crate) mod zai_chat;
 
 pub use compact::CompactClient;
 pub use memories::MemoriesClient;
@@ -25,3 +26,4 @@ pub use responses::ResponsesClient;
 pub use responses::ResponsesOptions;
 pub use responses_websocket::ResponsesWebsocketClient;
 pub use responses_websocket::ResponsesWebsocketConnection;
+pub use zai_chat::ZaiChatClient;

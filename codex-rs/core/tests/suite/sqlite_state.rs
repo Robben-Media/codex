@@ -407,6 +407,7 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::new_read_only_policy(),
             model: test.session_configured.model.clone(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

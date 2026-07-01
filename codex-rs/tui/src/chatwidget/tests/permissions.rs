@@ -634,6 +634,7 @@ async fn permissions_selection_sends_approvals_reviewer_in_override_turn_context
             sandbox_policy: Some(SandboxPolicy::new_workspace_write_policy()),
             windows_sandbox_level: None,
             model: None,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

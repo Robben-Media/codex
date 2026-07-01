@@ -7170,6 +7170,7 @@ impl CodexMessageProcessor {
                         sandbox_policy: params.sandbox_policy.map(|p| p.to_core()),
                         windows_sandbox_level: None,
                         model: params.model,
+                        model_provider: None,
                         effort: params.effort.map(Some),
                         summary: params.summary,
                         service_tier: params.service_tier,

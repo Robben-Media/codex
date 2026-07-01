@@ -1699,6 +1699,7 @@ dependencies = [
  "codex-mcp",
  "codex-mcp-server",
  "codex-model-provider",
+ "codex-model-provider-info",
  "codex-protocol",
  "codex-responses-api-proxy",
  "codex-rmcp-client",

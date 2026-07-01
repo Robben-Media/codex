@@ -1403,6 +1403,7 @@ mod tests {
             name: "test".to_string(),
             base_url: format!("http://{addr}"),
             query_params: Some(HashMap::new()),
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: crate::provider::RetryConfig {
                 max_attempts: 1,
@@ -1412,6 +1413,7 @@ mod tests {
                 retry_transport: false,
             },
             stream_idle_timeout: Duration::from_secs(5),
+            zai_thinking: None,
         };
         let client = RealtimeWebsocketClient::new(provider);
         let connection = client
@@ -1679,6 +1681,7 @@ mod tests {
             name: "test".to_string(),
             base_url: format!("http://{addr}"),
             query_params: Some(HashMap::new()),
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: crate::provider::RetryConfig {
                 max_attempts: 1,
@@ -1688,6 +1691,7 @@ mod tests {
                 retry_transport: false,
             },
             stream_idle_timeout: Duration::from_secs(5),
+            zai_thinking: None,
         };
         let client = RealtimeWebsocketClient::new(provider);
         let connection = client
@@ -1785,6 +1789,7 @@ mod tests {
             name: "test".to_string(),
             base_url: format!("http://{addr}"),
             query_params: Some(HashMap::new()),
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: crate::provider::RetryConfig {
                 max_attempts: 1,
@@ -1794,6 +1799,7 @@ mod tests {
                 retry_transport: false,
             },
             stream_idle_timeout: Duration::from_secs(5),
+            zai_thinking: None,
         };
         let client = RealtimeWebsocketClient::new(provider);
         let connection = client
@@ -1889,6 +1895,7 @@ mod tests {
             name: "test".to_string(),
             base_url: format!("http://{addr}"),
             query_params: Some(HashMap::new()),
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: crate::provider::RetryConfig {
                 max_attempts: 1,
@@ -1898,6 +1905,7 @@ mod tests {
                 retry_transport: false,
             },
             stream_idle_timeout: Duration::from_secs(5),
+            zai_thinking: None,
         };
         let client = RealtimeWebsocketClient::new(provider);
         let connection = client
@@ -1979,6 +1987,7 @@ mod tests {
             name: "test".to_string(),
             base_url: format!("http://{addr}"),
             query_params: Some(HashMap::new()),
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: crate::provider::RetryConfig {
                 max_attempts: 1,
@@ -1988,6 +1997,7 @@ mod tests {
                 retry_transport: false,
             },
             stream_idle_timeout: Duration::from_secs(5),
+            zai_thinking: None,
         };
         let client = RealtimeWebsocketClient::new(provider);
         let connection = client

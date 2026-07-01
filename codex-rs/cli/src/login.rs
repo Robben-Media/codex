@@ -13,15 +13,20 @@ use codex_core::config::Config;
 use codex_login::CLIENT_ID;
 use codex_login::CodexAuth;
 use codex_login::ServerOptions;
+use codex_login::load_auth_dot_json;
 use codex_login::login_with_api_key;
+use codex_login::login_with_provider_api_key;
 use codex_login::logout_with_revoke;
 use codex_login::run_device_code_login;
 use codex_login::run_login_server;
+use codex_login::validate_zai_api_key;
+use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_utils_cli::CliConfigOverrides;
 use std::fs::OpenOptions;
 use std::io::IsTerminal;
 use std::io::Read;
+use std::io::Write;
 use std::path::PathBuf;
 use tracing_appender::non_blocking;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -187,6 +192,30 @@ pub async fn run_login_with_api_key(
     }
 }
 
+pub async fn run_login_with_zai(cli_config_overrides: CliConfigOverrides, api_key: String) -> ! {
+    let config = load_config_or_exit(cli_config_overrides).await;
+    let _login_log_guard = init_login_file_logging(&config);
+    tracing::info!("starting Z.AI Code login flow");
+
+    match validate_zai_api_key(&api_key).await.and_then(|_| {
+        login_with_provider_api_key(
+            &config.codex_home,
+            ZAI_PROVIDER_ID,
+            &api_key,
+            config.cli_auth_credentials_store_mode,
+        )
+    }) {
+        Ok(_) => {
+            eprintln!("Successfully configured Z.AI Code");
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("Error configuring Z.AI Code: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 pub fn read_api_key_from_stdin() -> String {
     let mut stdin = std::io::stdin();
 
@@ -212,6 +241,57 @@ pub fn read_api_key_from_stdin() -> String {
     }
 
     api_key
+}
+
+#[cfg(unix)]
+pub fn read_api_key_from_tty(prompt: &str, fallback_command: &str) -> String {
+    use std::os::fd::AsRawFd;
+
+    let mut stderr = std::io::stderr();
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        eprintln!("{fallback_command}");
+        std::process::exit(1);
+    }
+
+    let fd = stdin.as_raw_fd();
+    let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+    if unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) } != 0 {
+        eprintln!("{fallback_command}");
+        std::process::exit(1);
+    }
+    let original = unsafe { termios.assume_init() };
+    let mut no_echo = original;
+    no_echo.c_lflag &= !libc::ECHO;
+    if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &no_echo) } != 0 {
+        eprintln!("{fallback_command}");
+        std::process::exit(1);
+    }
+
+    let _ = write!(stderr, "{prompt}");
+    let _ = stderr.flush();
+    let mut buffer = String::new();
+    let read_result = std::io::stdin().read_line(&mut buffer);
+    let _ = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &original) };
+    let _ = writeln!(stderr);
+
+    if let Err(err) = read_result {
+        eprintln!("Failed to read API key: {err}");
+        std::process::exit(1);
+    }
+
+    let api_key = buffer.trim().to_string();
+    if api_key.is_empty() {
+        eprintln!("No API key provided.");
+        std::process::exit(1);
+    }
+    api_key
+}
+
+#[cfg(not(unix))]
+pub fn read_api_key_from_tty(_prompt: &str, fallback_command: &str) -> String {
+    eprintln!("{fallback_command}");
+    std::process::exit(1);
 }
 
 /// Login using the OAuth device code flow.
@@ -315,12 +395,23 @@ pub async fn run_login_with_device_code_fallback_to_browser(
 
 pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
+    let zai_configured = std::env::var("ZAI_API_KEY")
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty())
+        || load_auth_dot_json(&config.codex_home, config.cli_auth_credentials_store_mode)
+            .ok()
+            .flatten()
+            .and_then(|auth| auth.provider_auth)
+            .is_some_and(|provider_auth| provider_auth.contains_key(ZAI_PROVIDER_ID));
 
     match CodexAuth::from_auth_storage(&config.codex_home, config.cli_auth_credentials_store_mode) {
         Ok(Some(auth)) => match auth.auth_mode() {
             AuthMode::ApiKey => match auth.get_token() {
                 Ok(api_key) => {
                     eprintln!("Logged in using an API key - {}", safe_format_key(&api_key));
+                    if zai_configured {
+                        eprintln!("Z.AI Code: configured");
+                    }
                     std::process::exit(0);
                 }
                 Err(e) => {
@@ -330,12 +421,20 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
             },
             AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens => {
                 eprintln!("Logged in using ChatGPT");
+                if zai_configured {
+                    eprintln!("Z.AI Code: configured");
+                }
                 std::process::exit(0);
             }
         },
         Ok(None) => {
-            eprintln!("Not logged in");
-            std::process::exit(1);
+            if zai_configured {
+                eprintln!("Z.AI Code: configured");
+                std::process::exit(0);
+            } else {
+                eprintln!("Not logged in");
+                std::process::exit(1);
+            }
         }
         Err(e) => {
             eprintln!("Error checking login status: {e}");

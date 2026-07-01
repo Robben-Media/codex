@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 #[cfg(test)]
 use serial_test::serial;
+use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
 use std::path::Path;
@@ -25,6 +26,7 @@ use super::revoke::revoke_auth_tokens;
 pub use crate::auth::storage::AgentIdentityAuthRecord;
 pub use crate::auth::storage::AuthDotJson;
 use crate::auth::storage::AuthStorageBackend;
+pub use crate::auth::storage::ProviderAuthRecord;
 use crate::auth::storage::create_auth_storage;
 use crate::auth::util::try_parse_error_message;
 use crate::default_client::create_client;
@@ -422,6 +424,7 @@ impl CodexAuth {
             }),
             last_refresh: Some(Utc::now()),
             agent_identity: None,
+            provider_auth: None,
         };
 
         let client = create_client();
@@ -461,6 +464,7 @@ impl ChatgptAuth {
 
 pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
 pub const CODEX_API_KEY_ENV_VAR: &str = "CODEX_API_KEY";
+const ZAI_CHAT_COMPLETIONS_URL: &str = "https://api.z.ai/api/coding/paas/v4/chat/completions";
 
 pub fn read_openai_api_key_from_env() -> Option<String> {
     env::var(OPENAI_API_KEY_ENV_VAR)
@@ -511,8 +515,65 @@ pub fn login_with_api_key(
         tokens: None,
         last_refresh: None,
         agent_identity: None,
+        provider_auth: None,
     };
     save_auth(codex_home, &auth_dot_json, auth_credentials_store_mode)
+}
+
+pub fn login_with_provider_api_key(
+    codex_home: &Path,
+    provider_id: &str,
+    api_key: &str,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+) -> std::io::Result<()> {
+    let storage = create_auth_storage(codex_home.to_path_buf(), auth_credentials_store_mode);
+    let mut auth_dot_json = storage.load()?.unwrap_or(AuthDotJson {
+        auth_mode: None,
+        openai_api_key: None,
+        tokens: None,
+        last_refresh: None,
+        agent_identity: None,
+        provider_auth: None,
+    });
+    let provider_auth = auth_dot_json.provider_auth.get_or_insert_with(HashMap::new);
+    provider_auth.insert(
+        provider_id.to_string(),
+        ProviderAuthRecord {
+            api_key: api_key.to_string(),
+            created_at: Utc::now(),
+        },
+    );
+    storage.save(&auth_dot_json)
+}
+
+pub async fn validate_zai_api_key(api_key: &str) -> std::io::Result<()> {
+    let response = create_client()
+        .post(ZAI_CHAT_COMPLETIONS_URL)
+        .bearer_auth(api_key)
+        .json(&serde_json::json!({
+            "model": "glm-5.1",
+            "messages": [{"role": "user", "content": "ping"}],
+            "thinking": {"type": "disabled"},
+            "stream": false,
+            "max_tokens": 1
+        }))
+        .send()
+        .await
+        .map_err(|_| std::io::Error::other("Could not reach Z.AI; key was not saved."))?;
+
+    match response.status() {
+        StatusCode::OK | StatusCode::CREATED => Ok(()),
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            Err(std::io::Error::other("Z.AI API key was rejected."))
+        }
+        StatusCode::TOO_MANY_REQUESTS => Err(std::io::Error::other(
+            "Z.AI API key could not be verified due to rate limits.",
+        )),
+        status if status.is_success() => Ok(()),
+        status => Err(std::io::Error::other(format!(
+            "Z.AI API key could not be verified: {status}"
+        ))),
+    }
 }
 
 /// Writes an in-memory auth payload for externally managed ChatGPT tokens.
@@ -885,6 +946,7 @@ impl AuthDotJson {
             tokens: Some(tokens),
             last_refresh: Some(Utc::now()),
             agent_identity: None,
+            provider_auth: None,
         })
     }
 
@@ -1313,6 +1375,26 @@ impl AuthManager {
     /// Current cached auth (clone) without attempting a refresh.
     pub fn auth_cached(&self) -> Option<CodexAuth> {
         self.inner.read().ok().and_then(|c| c.auth.clone())
+    }
+
+    pub fn provider_api_key(&self, provider_id: &str, env_key: Option<&str>) -> Option<String> {
+        if let Some(env_key) = env_key
+            && let Ok(value) = env::var(env_key)
+            && !value.trim().is_empty()
+        {
+            return Some(value.trim().to_string());
+        }
+
+        let storage =
+            create_auth_storage(self.codex_home.clone(), self.auth_credentials_store_mode);
+        storage
+            .load()
+            .ok()
+            .flatten()
+            .and_then(|auth| auth.provider_auth)
+            .and_then(|provider_auth| provider_auth.get(provider_id).cloned())
+            .map(|record| record.api_key)
+            .filter(|value| !value.trim().is_empty())
     }
 
     pub fn refresh_failure_for_auth(&self, auth: &CodexAuth) -> Option<RefreshTokenFailedError> {

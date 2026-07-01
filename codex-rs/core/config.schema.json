@@ -1116,6 +1116,14 @@
           ],
           "default": "responses",
           "description": "Which wire protocol this provider expects."
+        },
+        "zai_thinking": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ZaiThinkingConfig"
+            }
+          ],
+          "description": "Optional Z.AI-specific thinking configuration."
         }
       },
       "required": [
@@ -2162,8 +2170,37 @@
             "responses"
           ],
           "type": "string"
+        },
+        {
+          "description": "Z.AI Code's Chat Completions-compatible API.",
+          "enum": [
+            "zaichat"
+          ],
+          "type": "string"
         }
       ]
+    },
+    "ZaiThinkingConfig": {
+      "properties": {
+        "clear_thinking": {
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/definitions/ZaiThinkingType"
+        }
+      },
+      "required": [
+        "clear_thinking",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ZaiThinkingType": {
+      "enum": [
+        "enabled",
+        "disabled"
+      ],
+      "type": "string"
     }
   },
   "description": "Base config deserialized from ~/.codex/config.toml.",

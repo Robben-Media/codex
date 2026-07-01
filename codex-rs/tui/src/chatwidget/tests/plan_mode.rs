@@ -216,7 +216,7 @@ async fn reasoning_selection_in_plan_mode_without_effort_change_does_not_open_sc
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::UpdateModel(model) if model == "gpt-5.1-codex-max"
+            AppEvent::UpdateModel { model, .. } if model == "gpt-5.1-codex-max"
         )),
         "expected model update event; events: {events:?}"
     );
@@ -301,7 +301,7 @@ async fn reasoning_selection_in_plan_mode_model_switch_does_not_open_scope_promp
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::UpdateModel(model) if model == "gpt-5"
+            AppEvent::UpdateModel { model, .. } if model == "gpt-5"
         )),
         "expected model update event; events: {events:?}"
     );
@@ -342,7 +342,11 @@ async fn plan_reasoning_scope_popup_all_modes_persists_global_and_plan_override(
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::PersistModelSelection { model, effort: Some(ReasoningEffortConfig::High) }
+            AppEvent::PersistModelSelection {
+                model,
+                effort: Some(ReasoningEffortConfig::High),
+                ..
+            }
                 if model == "gpt-5.1-codex-max"
         )),
         "expected global model reasoning selection persistence; events: {events:?}"

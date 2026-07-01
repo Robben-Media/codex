@@ -7,6 +7,9 @@
 
 use codex_api::Provider as ApiProvider;
 use codex_api::RetryConfig as ApiRetryConfig;
+use codex_api::WireApi as ApiWireApi;
+use codex_api::ZaiThinkingConfig as ApiZaiThinkingConfig;
+use codex_api::ZaiThinkingType as ApiZaiThinkingType;
 use codex_api::is_azure_responses_provider;
 use codex_app_server_protocol::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -37,6 +40,7 @@ pub const OPENAI_PROVIDER_ID: &str = "openai";
 const CHAT_WIRE_API_REMOVED_ERROR: &str = "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config.\nMore info: https://github.com/openai/codex/discussions/7782";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
+pub const ZAI_PROVIDER_ID: &str = "zai";
 
 /// Wire protocol that the provider speaks.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, JsonSchema)]
@@ -45,12 +49,15 @@ pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
+    /// Z.AI Code's Chat Completions-compatible API.
+    ZaiChat,
 }
 
 impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
             Self::Responses => "responses",
+            Self::ZaiChat => "zai_chat",
         };
         f.write_str(value)
     }
@@ -64,8 +71,52 @@ impl<'de> Deserialize<'de> for WireApi {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "responses" => Ok(Self::Responses),
+            "zai_chat" => Ok(Self::ZaiChat),
             "chat" => Err(serde::de::Error::custom(CHAT_WIRE_API_REMOVED_ERROR)),
-            _ => Err(serde::de::Error::unknown_variant(&value, &["responses"])),
+            _ => Err(serde::de::Error::unknown_variant(
+                &value,
+                &["responses", "zai_chat"],
+            )),
+        }
+    }
+}
+
+impl From<WireApi> for ApiWireApi {
+    fn from(value: WireApi) -> Self {
+        match value {
+            WireApi::Responses => ApiWireApi::Responses,
+            WireApi::ZaiChat => ApiWireApi::ZaiChat,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ZaiThinkingType {
+    Enabled,
+    Disabled,
+}
+
+impl From<ZaiThinkingType> for ApiZaiThinkingType {
+    fn from(value: ZaiThinkingType) -> Self {
+        match value {
+            ZaiThinkingType::Enabled => ApiZaiThinkingType::Enabled,
+            ZaiThinkingType::Disabled => ApiZaiThinkingType::Disabled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct ZaiThinkingConfig {
+    pub r#type: ZaiThinkingType,
+    pub clear_thinking: bool,
+}
+
+impl From<ZaiThinkingConfig> for ApiZaiThinkingConfig {
+    fn from(value: ZaiThinkingConfig) -> Self {
+        Self {
+            r#type: value.r#type.into(),
+            clear_thinking: value.clear_thinking,
         }
     }
 }
@@ -122,6 +173,8 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the Responses API WebSocket transport.
     #[serde(default)]
     pub supports_websockets: bool,
+    /// Optional Z.AI-specific thinking configuration.
+    pub zai_thinking: Option<ZaiThinkingConfig>,
 }
 
 impl ModelProviderInfo {
@@ -207,8 +260,10 @@ impl ModelProviderInfo {
             base_url,
             query_params: self.query_params.clone(),
             headers,
+            wire_api: self.wire_api.into(),
             retry,
             stream_idle_timeout: self.stream_idle_timeout(),
+            zai_thinking: self.zai_thinking.clone().map(Into::into),
         })
     }
 
@@ -294,11 +349,16 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
             supports_websockets: true,
+            zai_thinking: None,
         }
     }
 
     pub fn is_openai(&self) -> bool {
         self.name == OPENAI_PROVIDER_NAME
+    }
+
+    pub fn is_zai(&self) -> bool {
+        self.wire_api == WireApi::ZaiChat
     }
 
     pub fn supports_remote_compaction(&self) -> bool {
@@ -329,6 +389,33 @@ pub fn built_in_model_providers(
     // `model_providers` in config.toml to add their own providers.
     [
         (OPENAI_PROVIDER_ID, openai_provider),
+        (
+            ZAI_PROVIDER_ID,
+            ModelProviderInfo {
+                name: "Z.AI Code".into(),
+                base_url: Some("https://api.z.ai/api/coding/paas/v4".into()),
+                env_key: Some("ZAI_API_KEY".into()),
+                env_key_instructions: Some(
+                    "Set ZAI_API_KEY to your Z.AI API key or run `codex login zai`.".into(),
+                ),
+                experimental_bearer_token: None,
+                auth: None,
+                wire_api: WireApi::ZaiChat,
+                query_params: None,
+                http_headers: None,
+                env_http_headers: None,
+                request_max_retries: None,
+                stream_max_retries: None,
+                stream_idle_timeout_ms: None,
+                websocket_connect_timeout_ms: None,
+                requires_openai_auth: false,
+                supports_websockets: false,
+                zai_thinking: Some(ZaiThinkingConfig {
+                    r#type: ZaiThinkingType::Enabled,
+                    clear_thinking: false,
+                }),
+            },
+        ),
         (
             OLLAMA_OSS_PROVIDER_ID,
             create_oss_provider(DEFAULT_OLLAMA_PORT, WireApi::Responses),
@@ -380,6 +467,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        zai_thinking: None,
     }
 }
 

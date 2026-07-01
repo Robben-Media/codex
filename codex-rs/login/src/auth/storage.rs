@@ -42,6 +42,15 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_identity: Option<AgentIdentityAuthRecord>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_auth: Option<HashMap<String, ProviderAuthRecord>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct ProviderAuthRecord {
+    pub api_key: String,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

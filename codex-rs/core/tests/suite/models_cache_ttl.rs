@@ -100,6 +100,7 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,
             model: test.session_configured.model.clone(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -318,6 +319,7 @@ struct ModelsCache {
 fn test_remote_model(slug: &str, priority: i32) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: "Remote Test".to_string(),
         description: Some("remote model".to_string()),
         default_reasoning_level: Some(ReasoningEffort::Medium),

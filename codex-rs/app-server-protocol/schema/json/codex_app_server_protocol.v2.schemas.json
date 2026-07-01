@@ -6505,6 +6505,9 @@
         "model": {
           "type": "string"
         },
+        "modelProvider": {
+          "type": "string"
+        },
         "supportedReasoningEfforts": {
           "items": {
             "$ref": "#/definitions/ReasoningEffortOption"
@@ -6540,6 +6543,7 @@
         "id",
         "isDefault",
         "model",
+        "modelProvider",
         "supportedReasoningEfforts"
       ],
       "type": "object"

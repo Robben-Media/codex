@@ -1678,6 +1678,7 @@ async fn fork_startup_context_then_first_turn_diff_snapshot() -> anyhow::Result<
             sandbox_policy: None,
             windows_sandbox_level: None,
             model: None,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -2294,6 +2295,7 @@ async fn set_rate_limits_retains_previous_credits() {
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -2399,6 +2401,7 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -2754,6 +2757,7 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
     };
 
     SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -3024,6 +3028,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_zsh_path() {
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -3128,6 +3133,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -3346,6 +3352,7 @@ async fn make_session_with_config_and_rx(
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -3712,6 +3719,7 @@ fn op_kind_distinguishes_turn_ops() {
             sandbox_policy: None,
             windows_sandbox_level: None,
             model: None,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -3750,6 +3758,7 @@ async fn user_turn_updates_approvals_reviewer() {
             approvals_reviewer: Some(codex_config::types::ApprovalsReviewer::GuardianSubagent),
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: turn_context.model_info.slug.clone(),
+            model_provider: None,
             effort: config.model_reasoning_effort,
             summary: config.model_reasoning_summary,
             service_tier: None,
@@ -4098,6 +4107,7 @@ where
         },
     };
     let session_configuration = SessionConfiguration {
+        provider_id: "test-provider".to_string(),
         provider: config.model_provider.clone(),
         collaboration_mode,
         model_reasoning_summary: config.model_reasoning_summary,
@@ -4548,6 +4558,7 @@ fn make_chatgpt_auth(account_id: &str, user_id: Option<&str>) -> CodexAuth {
         }),
         last_refresh: Some(Utc::now()),
         agent_identity: None,
+        provider_auth: None,
     };
     save_auth(tempdir.path(), &auth_json, AuthCredentialsStoreMode::File).expect("save auth");
     CodexAuth::from_auth_storage(tempdir.path(), AuthCredentialsStoreMode::File)

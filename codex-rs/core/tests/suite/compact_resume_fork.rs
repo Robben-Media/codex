@@ -577,6 +577,7 @@ async fn snapshot_rollback_followup_turn_trims_context_updates() -> Result<()> {
             sandbox_policy: None,
             windows_sandbox_level: None,
             model: None,
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

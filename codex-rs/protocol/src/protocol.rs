@@ -450,6 +450,10 @@ pub enum Op {
         /// associated with this conversation.
         model: String,
 
+        /// Optional model provider id for this turn.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_provider: Option<String>,
+
         /// Will only be honored if the model is configured to use reasoning.
         #[serde(skip_serializing_if = "Option::is_none")]
         effort: Option<ReasoningEffortConfig>,
@@ -519,6 +523,10 @@ pub enum Op {
         /// automatically.
         #[serde(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
+
+        /// Updated model provider id.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_provider: Option<String>,
 
         /// Updated reasoning effort (honored only for reasoning-capable models).
         ///

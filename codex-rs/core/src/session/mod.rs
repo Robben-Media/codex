@@ -594,6 +594,7 @@ impl Codex {
             },
         };
         let session_configuration = SessionConfiguration {
+            provider_id: config.model_provider_id.clone(),
             provider: config.model_provider.clone(),
             collaboration_mode,
             model_reasoning_summary: config.model_reasoning_summary,

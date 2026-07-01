@@ -167,6 +167,7 @@ async fn remote_models_config_context_window_override_clamps_to_max_context_wind
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: requested_model.to_string(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -243,6 +244,7 @@ async fn remote_models_config_override_above_max_uses_max_context_window() -> Re
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: requested_model.to_string(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -318,6 +320,7 @@ async fn remote_models_use_context_window_when_config_override_is_absent() -> Re
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: requested_model.to_string(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -406,6 +409,7 @@ async fn remote_models_long_model_slug_is_sent_with_high_reasoning() -> Result<(
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: requested_model.to_string(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -465,6 +469,7 @@ async fn namespaced_model_slug_uses_catalog_metadata_without_fallback_warning() 
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: requested_model.to_string(),
+            model_provider: None,
             effort: None,
             summary: Some(
                 config
@@ -510,6 +515,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
 
     let remote_model = ModelInfo {
         slug: REMOTE_MODEL_SLUG.to_string(),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: "Remote Test".to_string(),
         description: Some("A remote model that requires the test shell".to_string()),
         default_reasoning_level: Some(ReasoningEffort::Medium),
@@ -592,6 +598,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
             sandbox_policy: None,
             windows_sandbox_level: None,
             model: Some(REMOTE_MODEL_SLUG.to_string()),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -631,6 +638,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,
             model: REMOTE_MODEL_SLUG.to_string(),
+            model_provider: None,
             effort: None,
             summary: Some(ReasoningSummary::Auto),
             service_tier: None,
@@ -760,6 +768,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
     let remote_base = "Use the remote base instructions only.";
     let remote_model = ModelInfo {
         slug: model.to_string(),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: "Parallel Remote".to_string(),
         description: Some("A remote model with custom instructions".to_string()),
         default_reasoning_level: Some(ReasoningEffort::Medium),
@@ -836,6 +845,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
             sandbox_policy: None,
             windows_sandbox_level: None,
             model: Some(model.to_string()),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,
@@ -856,6 +866,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,
             model: model.to_string(),
+            model_provider: None,
             effort: None,
             summary: Some(ReasoningSummary::Auto),
             service_tier: None,
@@ -1244,6 +1255,7 @@ fn test_remote_model_with_policy(
 ) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: format!("{slug} display"),
         description: Some(format!("{slug} description")),
         default_reasoning_level: Some(ReasoningEffort::Medium),

@@ -1876,6 +1876,7 @@ impl From<CoreModelAvailabilityNux> for ModelAvailabilityNux {
 pub struct Model {
     pub id: String,
     pub model: String,
+    pub model_provider: String,
     pub upgrade: Option<String>,
     pub upgrade_info: Option<ModelUpgradeInfo>,
     pub availability_nux: Option<ModelAvailabilityNux>,

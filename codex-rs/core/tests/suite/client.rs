@@ -851,6 +851,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        zai_thinking: None,
     };
 
     let codex_home = TempDir::new().unwrap();
@@ -1652,6 +1653,7 @@ async fn user_turn_collaboration_mode_overrides_model_and_effort() -> anyhow::Re
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: session_configured.model.clone(),
+            model_provider: None,
             effort: Some(ReasoningEffort::Low),
             summary: Some(
                 config
@@ -1771,6 +1773,7 @@ async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() 
             approvals_reviewer: None,
             sandbox_policy: config.permissions.sandbox_policy.get().clone(),
             model: session_configured.model,
+            model_provider: None,
             effort: None,
             summary: Some(ReasoningSummary::Concise),
             service_tier: None,
@@ -2148,6 +2151,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        zai_thinking: None,
     };
 
     let codex_home = TempDir::new().unwrap();
@@ -2773,6 +2777,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        zai_thinking: None,
     };
 
     // Init session
@@ -2859,6 +2864,7 @@ async fn env_var_overrides_loaded_auth() {
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        zai_thinking: None,
     };
 
     // Init session

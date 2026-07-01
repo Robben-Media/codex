@@ -57,6 +57,8 @@ use codex_api::SharedAuthProvider;
 use codex_api::SseTelemetry;
 use codex_api::TransportError;
 use codex_api::WebsocketTelemetry;
+use codex_api::ZaiChatClient as ApiZaiChatClient;
+use codex_api::ZaiThinkingType;
 use codex_api::auth_header_telemetry;
 use codex_api::build_conversation_headers;
 use codex_api::create_text_param_for_request;
@@ -74,12 +76,15 @@ use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::W3cTraceContext;
+use codex_tools::ToolSpec;
 use codex_tools::create_tools_json_for_responses_api;
 use eventsource_stream::Event;
 use eventsource_stream::EventStreamError;
@@ -280,6 +285,190 @@ fn sideband_websocket_auth_headers(api_auth: &dyn AuthProvider) -> ApiHeaderMap 
     let mut headers = ApiHeaderMap::new();
     api_auth.add_auth_headers(&mut headers);
     headers
+}
+
+fn build_zai_chat_body(
+    prompt: &Prompt,
+    model_info: &ModelInfo,
+    provider: &ApiProvider,
+    effort: Option<ReasoningEffortConfig>,
+) -> Result<serde_json::Value> {
+    let mut messages = Vec::new();
+    if !prompt.base_instructions.text.trim().is_empty() {
+        messages.push(serde_json::json!({
+            "role": "system",
+            "content": prompt.base_instructions.text,
+        }));
+    }
+
+    let mut pending_reasoning = String::new();
+    for item in prompt.get_formatted_input() {
+        match item {
+            ResponseItem::Message { role, content, .. } => {
+                let content = content_items_to_zai_content(content);
+                let role = if role == "developer" {
+                    "system"
+                } else {
+                    role.as_str()
+                };
+                let mut message = serde_json::json!({
+                    "role": role,
+                    "content": content,
+                });
+                if role == "assistant"
+                    && !pending_reasoning.is_empty()
+                    && let Some(object) = message.as_object_mut()
+                {
+                    object.insert(
+                        "reasoning_content".to_string(),
+                        serde_json::Value::String(std::mem::take(&mut pending_reasoning)),
+                    );
+                }
+                messages.push(message);
+            }
+            ResponseItem::Reasoning {
+                content: Some(content),
+                ..
+            } => {
+                for content in content {
+                    if let ReasoningItemContent::ReasoningText { text } = content {
+                        pending_reasoning.push_str(&text);
+                    }
+                }
+            }
+            ResponseItem::FunctionCall {
+                name,
+                arguments,
+                call_id,
+                ..
+            }
+            | ResponseItem::CustomToolCall {
+                name,
+                input: arguments,
+                call_id,
+                ..
+            } => {
+                let mut message = serde_json::json!({
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": arguments,
+                        }
+                    }],
+                });
+                if !pending_reasoning.is_empty()
+                    && let Some(object) = message.as_object_mut()
+                {
+                    object.insert(
+                        "reasoning_content".to_string(),
+                        serde_json::Value::String(std::mem::take(&mut pending_reasoning)),
+                    );
+                }
+                messages.push(message);
+            }
+            ResponseItem::FunctionCallOutput { call_id, output }
+            | ResponseItem::CustomToolCallOutput {
+                call_id, output, ..
+            } => {
+                messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": output.text_content().unwrap_or_default(),
+                }));
+            }
+            _ => {}
+        }
+    }
+
+    let tools = prompt
+        .tools
+        .iter()
+        .filter_map(zai_tool_from_spec)
+        .collect::<Vec<_>>();
+    let thinking_type = if effort == Some(ReasoningEffortConfig::None) {
+        ZaiThinkingType::Disabled
+    } else {
+        ZaiThinkingType::Enabled
+    };
+    let mut thinking = provider
+        .zai_thinking
+        .clone()
+        .unwrap_or(codex_api::ZaiThinkingConfig {
+            r#type: thinking_type,
+            clear_thinking: false,
+        });
+    thinking.r#type = thinking_type;
+
+    let mut body = serde_json::json!({
+        "model": model_info.slug,
+        "messages": messages,
+        "stream": true,
+        "thinking": thinking,
+        "tool_stream": true,
+    });
+    if !tools.is_empty()
+        && let Some(object) = body.as_object_mut()
+    {
+        object.insert("tools".to_string(), serde_json::Value::Array(tools));
+    }
+    Ok(body)
+}
+
+fn content_items_to_zai_content(content: Vec<ContentItem>) -> serde_json::Value {
+    let mut text = String::new();
+    let mut multimodal = Vec::new();
+    for item in content {
+        match item {
+            ContentItem::InputText { text: item_text }
+            | ContentItem::OutputText { text: item_text } => {
+                text.push_str(&item_text);
+                multimodal.push(serde_json::json!({"type": "text", "text": item_text}));
+            }
+            ContentItem::InputImage {
+                image_url,
+                detail: _,
+            } => {
+                multimodal.push(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                }));
+            }
+        }
+    }
+    if multimodal
+        .iter()
+        .any(|item| item.get("type").and_then(serde_json::Value::as_str) == Some("image_url"))
+    {
+        serde_json::Value::Array(multimodal)
+    } else {
+        serde_json::Value::String(text)
+    }
+}
+
+fn zai_tool_from_spec(tool: &ToolSpec) -> Option<serde_json::Value> {
+    let value = serde_json::to_value(tool).ok()?;
+    let object = value.as_object()?;
+    let name = object.get("name")?.clone();
+    let description = object
+        .get("description")
+        .cloned()
+        .unwrap_or_else(|| serde_json::Value::String(String::new()));
+    let parameters = object
+        .get("parameters")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
+    Some(serde_json::json!({
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+        }
+    }))
 }
 
 impl ModelClient {
@@ -1211,6 +1400,49 @@ impl ModelClientSession {
         }
     }
 
+    async fn stream_zai_chat(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
+    ) -> Result<ResponseStream> {
+        if prompt.output_schema.is_some() {
+            return Err(CodexErr::UnsupportedOperation(
+                "output_schema is not supported for Z.AI Chat Completions".to_string(),
+            ));
+        }
+
+        let client_setup = self.client.current_client_setup().await?;
+        let transport = ReqwestTransport::new(build_reqwest_client());
+        let request_auth_context = AuthRequestTelemetryContext::new(
+            client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+            client_setup.api_auth.as_ref(),
+            PendingUnauthorizedRetry::default(),
+        );
+        let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
+            session_telemetry,
+            request_auth_context,
+            RequestRouteTelemetry::for_endpoint("chat/completions"),
+            self.client.state.auth_env_telemetry.clone(),
+        );
+        let body = build_zai_chat_body(prompt, model_info, &client_setup.api_provider, effort)?;
+        let mut extra_headers = ApiHeaderMap::new();
+        extra_headers.extend(build_conversation_headers(Some(
+            self.client.state.conversation_id.to_string(),
+        )));
+
+        let client =
+            ApiZaiChatClient::new(transport, client_setup.api_provider, client_setup.api_auth)
+                .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+        let stream = client
+            .stream_request(body, extra_headers)
+            .await
+            .map_err(map_api_error)?;
+        let (stream, _) = map_response_stream(stream, session_telemetry.clone());
+        Ok(stream)
+    }
+
     /// Streams a turn via the Responses API over WebSocket transport.
     #[allow(clippy::too_many_arguments)]
     #[instrument(
@@ -1466,6 +1698,10 @@ impl ModelClientSession {
                     turn_metadata_header,
                 )
                 .await
+            }
+            WireApi::ZaiChat => {
+                self.stream_zai_chat(prompt, model_info, session_telemetry, effort)
+                    .await
             }
         }
     }

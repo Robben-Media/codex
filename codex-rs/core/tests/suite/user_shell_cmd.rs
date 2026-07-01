@@ -180,6 +180,7 @@ async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()>
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,
             model: fixture.session_configured.model.clone(),
+            model_provider: None,
             effort: None,
             summary: None,
             service_tier: None,

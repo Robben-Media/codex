@@ -143,6 +143,7 @@ mod tests {
             name: "test".to_string(),
             base_url: base_url.to_string(),
             query_params: None,
+            wire_api: crate::provider::WireApi::Responses,
             headers: HeaderMap::new(),
             retry: RetryConfig {
                 max_attempts: 1,
@@ -152,6 +153,7 @@ mod tests {
                 retry_transport: true,
             },
             stream_idle_timeout: Duration::from_secs(1),
+            zai_thinking: None,
         }
     }
 

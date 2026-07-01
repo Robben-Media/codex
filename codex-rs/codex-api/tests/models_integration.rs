@@ -33,6 +33,7 @@ fn provider(base_url: &str) -> Provider {
         name: "test".to_string(),
         base_url: base_url.to_string(),
         query_params: None,
+        wire_api: codex_api::WireApi::Responses,
         headers: HeaderMap::new(),
         retry: RetryConfig {
             max_attempts: 1,
@@ -42,6 +43,7 @@ fn provider(base_url: &str) -> Provider {
             retry_transport: true,
         },
         stream_idle_timeout: std::time::Duration::from_secs(1),
+        zai_thinking: None,
     }
 }
 
@@ -53,6 +55,7 @@ async fn models_client_hits_models_endpoint() {
     let response = ModelsResponse {
         models: vec![ModelInfo {
             slug: "gpt-test".to_string(),
+            model_provider: codex_protocol::openai_models::default_model_provider(),
             display_name: "gpt-test".to_string(),
             description: Some("desc".to_string()),
             default_reasoning_level: Some(ReasoningEffort::Medium),

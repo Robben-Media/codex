@@ -1000,6 +1000,7 @@ mod tests {
             }),
             last_refresh: Some(Utc::now()),
             agent_identity: None,
+            provider_auth: None,
         }
     }
 

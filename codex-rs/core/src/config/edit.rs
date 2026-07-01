@@ -27,6 +27,7 @@ pub enum ConfigEdit {
     /// Update the active (or default) model selection and optional reasoning effort.
     SetModel {
         model: Option<String>,
+        model_provider: Option<String>,
         effort: Option<ReasoningEffort>,
     },
     /// Update the service tier preference for future turns.
@@ -406,11 +407,21 @@ impl ConfigDocument {
 
     fn apply(&mut self, edit: &ConfigEdit) -> anyhow::Result<bool> {
         match edit {
-            ConfigEdit::SetModel { model, effort } => Ok({
+            ConfigEdit::SetModel {
+                model,
+                model_provider,
+                effort,
+            } => Ok({
                 let mut mutated = false;
                 mutated |= self.write_profile_value(
                     &["model"],
                     model.as_ref().map(|model_value| value(model_value.clone())),
+                );
+                mutated |= self.write_profile_value(
+                    &["model_provider"],
+                    model_provider
+                        .as_ref()
+                        .map(|provider_value| value(provider_value.clone())),
                 );
                 mutated |= self.write_profile_value(
                     &["model_reasoning_effort"],
@@ -950,6 +961,21 @@ impl ConfigEditsBuilder {
     pub fn set_model(mut self, model: Option<&str>, effort: Option<ReasoningEffort>) -> Self {
         self.edits.push(ConfigEdit::SetModel {
             model: model.map(ToOwned::to_owned),
+            model_provider: None,
+            effort,
+        });
+        self
+    }
+
+    pub fn set_model_with_provider(
+        mut self,
+        model: Option<&str>,
+        model_provider: Option<&str>,
+        effort: Option<ReasoningEffort>,
+    ) -> Self {
+        self.edits.push(ConfigEdit::SetModel {
+            model: model.map(ToOwned::to_owned),
+            model_provider: model_provider.map(ToOwned::to_owned),
             effort,
         });
         self

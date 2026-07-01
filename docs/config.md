@@ -60,6 +60,22 @@ When Codex knows which client started the turn, the legacy notify JSON payload a
 
 The generated JSON Schema for `config.toml` lives at `codex-rs/core/config.schema.json`.
 
+## Z.AI Code Provider
+
+After `codex login zai`, the normal model picker can select `Z.AI GLM-5.1`.
+The persisted configuration stores model routing separately:
+
+```toml
+model = "glm-5.1"
+model_provider = "zai"
+```
+
+The built-in Z.AI provider uses the coding endpoint
+`https://api.z.ai/api/coding/paas/v4` and falls back to `ZAI_API_KEY` when that
+environment variable is set. Z.AI thinking is enabled by default with preserved
+thinking (`clear_thinking = false`) so reasoning context can be replayed on
+later turns.
+
 ## SQLite State DB
 
 Codex stores the SQLite-backed state DB under `sqlite_home` (config key) or the

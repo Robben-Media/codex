@@ -126,6 +126,7 @@ fn provider(name: &str) -> Provider {
         name: name.to_string(),
         base_url: "https://example.com/v1".to_string(),
         query_params: None,
+        wire_api: codex_api::WireApi::Responses,
         headers: HeaderMap::new(),
         retry: codex_api::RetryConfig {
             max_attempts: 1,
@@ -135,6 +136,7 @@ fn provider(name: &str) -> Provider {
             retry_transport: true,
         },
         stream_idle_timeout: Duration::from_millis(10),
+        zai_thinking: None,
     }
 }
 

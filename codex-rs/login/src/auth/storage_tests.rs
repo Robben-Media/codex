@@ -19,6 +19,7 @@ async fn file_storage_load_returns_auth_dot_json() -> anyhow::Result<()> {
         tokens: None,
         last_refresh: Some(Utc::now()),
         agent_identity: None,
+        provider_auth: None,
     };
 
     storage
@@ -40,6 +41,7 @@ async fn file_storage_save_persists_auth_dot_json() -> anyhow::Result<()> {
         tokens: None,
         last_refresh: Some(Utc::now()),
         agent_identity: None,
+        provider_auth: None,
     };
 
     let file = get_auth_file(codex_home.path());
@@ -70,6 +72,7 @@ async fn file_storage_persists_agent_identity() -> anyhow::Result<()> {
             agent_private_key: "pkcs8-base64".to_string(),
             registered_at: "2026-04-13T12:00:00Z".to_string(),
         }),
+        provider_auth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -87,6 +90,7 @@ fn file_storage_delete_removes_auth_file() -> anyhow::Result<()> {
         tokens: None,
         last_refresh: None,
         agent_identity: None,
+        provider_auth: None,
     };
     let storage = create_auth_storage(dir.path().to_path_buf(), AuthCredentialsStoreMode::File);
     storage.save(&auth_dot_json)?;
@@ -111,6 +115,7 @@ fn ephemeral_storage_save_load_delete_is_in_memory_only() -> anyhow::Result<()> 
         tokens: None,
         last_refresh: Some(Utc::now()),
         agent_identity: None,
+        provider_auth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -210,6 +215,7 @@ fn auth_with_prefix(prefix: &str) -> AuthDotJson {
         }),
         last_refresh: None,
         agent_identity: None,
+        provider_auth: None,
     }
 }
 
@@ -227,6 +233,7 @@ fn keyring_auth_storage_load_returns_deserialized_auth() -> anyhow::Result<()> {
         tokens: None,
         last_refresh: None,
         agent_identity: None,
+        provider_auth: None,
     };
     seed_keyring_with_auth(
         &mock_keyring,
@@ -270,6 +277,7 @@ fn keyring_auth_storage_save_persists_and_removes_fallback_file() -> anyhow::Res
         }),
         last_refresh: Some(Utc::now()),
         agent_identity: None,
+        provider_auth: None,
     };
 
     storage.save(&auth)?;

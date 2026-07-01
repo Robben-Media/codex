@@ -357,7 +357,10 @@ pub(crate) enum AppEvent {
     UpdateReasoningEffort(Option<ReasoningEffort>),
 
     /// Update the current model slug in the running app and widget.
-    UpdateModel(String),
+    UpdateModel {
+        model: String,
+        model_provider: String,
+    },
 
     /// Update the active collaboration mask in the running app and widget.
     UpdateCollaborationMode(CollaborationModeMask),
@@ -368,6 +371,7 @@ pub(crate) enum AppEvent {
     /// Persist the selected model and reasoning effort to the appropriate config.
     PersistModelSelection {
         model: String,
+        model_provider: String,
         effort: Option<ReasoningEffort>,
     },
 

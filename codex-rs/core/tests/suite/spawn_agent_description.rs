@@ -56,6 +56,7 @@ fn test_model_info(
 ) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
+        model_provider: codex_protocol::openai_models::default_model_provider(),
         display_name: display_name.to_string(),
         description: Some(description.to_string()),
         default_reasoning_level: Some(default_reasoning_level),

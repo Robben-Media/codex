@@ -10,11 +10,13 @@ pub use debug_sandbox::run_command_under_landlock;
 pub use debug_sandbox::run_command_under_seatbelt;
 pub use debug_sandbox::run_command_under_windows;
 pub use login::read_api_key_from_stdin;
+pub use login::read_api_key_from_tty;
 pub use login::run_login_status;
 pub use login::run_login_with_api_key;
 pub use login::run_login_with_chatgpt;
 pub use login::run_login_with_device_code;
 pub use login::run_login_with_device_code_fallback_to_browser;
+pub use login::run_login_with_zai;
 pub use login::run_logout;
 
 #[derive(Debug, Parser)]

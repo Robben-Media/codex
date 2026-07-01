@@ -9773,6 +9773,9 @@
           "model": {
             "type": "string"
           },
+          "modelProvider": {
+            "type": "string"
+          },
           "supportedReasoningEfforts": {
             "items": {
               "$ref": "#/definitions/v2/ReasoningEffortOption"
@@ -9808,6 +9811,7 @@
           "id",
           "isDefault",
           "model",
+          "modelProvider",
           "supportedReasoningEfforts"
         ],
         "type": "object"

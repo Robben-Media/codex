@@ -11,10 +11,12 @@ use codex_cli::LandlockCommand;
 use codex_cli::SeatbeltCommand;
 use codex_cli::WindowsCommand;
 use codex_cli::read_api_key_from_stdin;
+use codex_cli::read_api_key_from_tty;
 use codex_cli::run_login_status;
 use codex_cli::run_login_with_api_key;
 use codex_cli::run_login_with_chatgpt;
 use codex_cli::run_login_with_device_code;
+use codex_cli::run_login_with_zai;
 use codex_cli::run_logout;
 use codex_cloud_tasks::Cli as CloudTasksCli;
 use codex_exec::Cli as ExecCli;
@@ -31,6 +33,7 @@ use codex_tui::UpdateAction;
 use codex_utils_cli::CliConfigOverrides;
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
+use std::io::Write;
 use std::path::PathBuf;
 use supports_color::Stream;
 
@@ -362,6 +365,17 @@ struct LoginCommand {
 enum LoginSubcommand {
     /// Show login status.
     Status,
+    /// Configure Z.AI Code with an API key.
+    Zai(ZaiLoginCommand),
+}
+
+#[derive(Debug, Parser)]
+struct ZaiLoginCommand {
+    #[arg(
+        long = "with-api-key",
+        help = "Read the Z.AI API key from stdin (e.g. `printenv ZAI_API_KEY | codex login zai --with-api-key`)"
+    )]
+    with_api_key: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -885,6 +899,17 @@ async fn cli_main(arg0_paths: Arg0DispatchPaths) -> anyhow::Result<()> {
                 Some(LoginSubcommand::Status) => {
                     run_login_status(login_cli.config_overrides).await;
                 }
+                Some(LoginSubcommand::Zai(zai_cli)) => {
+                    let api_key = if zai_cli.with_api_key {
+                        read_api_key_from_stdin()
+                    } else {
+                        read_api_key_from_tty(
+                            "Z.AI API key: ",
+                            "Unable to read a hidden API key from this terminal. Try `printenv ZAI_API_KEY | codex login zai --with-api-key`.",
+                        )
+                    };
+                    run_login_with_zai(login_cli.config_overrides, api_key).await;
+                }
                 None => {
                     if login_cli.use_device_code {
                         run_login_with_device_code(
@@ -901,6 +926,38 @@ async fn cli_main(arg0_paths: Arg0DispatchPaths) -> anyhow::Result<()> {
                     } else if login_cli.with_api_key {
                         let api_key = read_api_key_from_stdin();
                         run_login_with_api_key(login_cli.config_overrides, api_key).await;
+                    } else if std::io::stdin().is_terminal() {
+                        eprintln!("Select login method:");
+                        eprintln!("1. ChatGPT");
+                        eprintln!("2. OpenAI API key");
+                        eprintln!("3. Z.AI Code");
+                        eprint!("Choice [1]: ");
+                        let _ = std::io::stderr().flush();
+                        let mut choice = String::new();
+                        if let Err(err) = std::io::stdin().read_line(&mut choice) {
+                            eprintln!("Failed to read login choice: {err}");
+                            std::process::exit(1);
+                        }
+                        match choice.trim() {
+                            "" | "1" => run_login_with_chatgpt(login_cli.config_overrides).await,
+                            "2" => {
+                                eprintln!(
+                                    "OpenAI API key login reads from stdin. Try `printenv OPENAI_API_KEY | codex login --with-api-key`."
+                                );
+                                std::process::exit(1);
+                            }
+                            "3" => {
+                                let api_key = read_api_key_from_tty(
+                                    "Z.AI API key: ",
+                                    "Unable to read a hidden API key from this terminal. Try `printenv ZAI_API_KEY | codex login zai --with-api-key`.",
+                                );
+                                run_login_with_zai(login_cli.config_overrides, api_key).await;
+                            }
+                            other => {
+                                eprintln!("Unknown login choice: {other}");
+                                std::process::exit(1);
+                            }
+                        }
                     } else {
                         run_login_with_chatgpt(login_cli.config_overrides).await;
                     }

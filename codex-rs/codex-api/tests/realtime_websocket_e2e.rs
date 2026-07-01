@@ -60,6 +60,7 @@ fn test_provider(base_url: String) -> Provider {
         name: "test".to_string(),
         base_url,
         query_params: Some(HashMap::new()),
+        wire_api: codex_api::WireApi::Responses,
         headers: HeaderMap::new(),
         retry: RetryConfig {
             max_attempts: 1,
@@ -69,6 +70,7 @@ fn test_provider(base_url: String) -> Provider {
             retry_transport: false,
         },
         stream_idle_timeout: Duration::from_secs(5),
+        zai_thinking: None,
     }
 }
 
